@@ -9,14 +9,14 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
 const STL_CENTER = [-90.1994, 38.6270];
 const STL_ZOOM = 12.5;
 
-// Categories to search for safe locations (Mapbox POI categories)
-const SAFE_POI_SEARCHES = [
-    { query: 'police station', icon: '🚔', color: '#3b82f6', label: 'Police Station' },
-    { query: 'fire station', icon: '🚒', color: '#ef4444', label: 'Fire Station' },
-    { query: 'hospital', icon: '🏥', color: '#10b981', label: 'Hospital' },
-    { query: 'pharmacy', icon: '💊', color: '#8b5cf6', label: 'Pharmacy' },
-    { query: 'library', icon: '📚', color: '#6366f1', label: 'Library' },
-];
+const SAFE_ICON_MAP = {
+    hospital: '🏥',
+    police: '🚔',
+    fire_station: '🚒',
+    pharmacy: '💊',
+    library: '📚',
+    gas_station: '⛽',
+};
 
 /**
  * Reverse geocode a coordinate to get the street/place name.
@@ -42,40 +42,30 @@ async function reverseGeocode(lat, lng) {
 }
 
 /**
- * Fetch real safe POIs near the center using Mapbox Places API.
+ * Fetch nearby safe places from backend (Google Places API with live open/closed status).
  */
 async function fetchSafePOIs(centerLng, centerLat) {
-    const allPOIs = [];
-
-    for (const poiType of SAFE_POI_SEARCHES) {
-        try {
-            const res = await fetch(
-                `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(poiType.query)}.json?access_token=${MAPBOX_TOKEN}&proximity=${centerLng},${centerLat}&bbox=${centerLng - 0.06},${centerLat - 0.04},${centerLng + 0.06},${centerLat + 0.04}&limit=5`
-            );
-            const data = await res.json();
-            if (data.features) {
-                for (const f of data.features) {
-                    allPOIs.push({
-                        name: f.text || f.place_name.split(',')[0],
-                        address: f.place_name,
-                        lng: f.center[0],
-                        lat: f.center[1],
-                        icon: poiType.icon,
-                        color: poiType.color,
-                        label: poiType.label,
-                    });
-                }
-            }
-        } catch (e) {
-            console.warn(`Failed to fetch ${poiType.label}:`, e);
+    try {
+        const res = await fetch(
+            `${API_URL}/nearby-safe?lat=${centerLat}&lng=${centerLng}&radius=3000`
+        );
+        const data = await res.json();
+        if (data.error) {
+            console.warn('[SafePlaces] Backend error:', data.error);
+            return [];
         }
+        return (data.places || []).map(p => ({
+            ...p,
+            icon: SAFE_ICON_MAP[p.type] || '🛡️',
+        }));
+    } catch (e) {
+        console.warn('Failed to fetch safe places:', e);
+        return [];
     }
-
-    return allPOIs;
 }
 
 
-function MapView({ onLocationClick, route, heatmapVisible, safeLocationsVisible, onMapReady }) {
+function MapView({ onLocationClick, route, heatmapVisible, safeLocationsVisible, onSafeLoadingChange, onMapReady }) {
     const mapContainer = useRef(null);
     const mapRef = useRef(null);
     const markersRef = useRef([]);
@@ -293,32 +283,57 @@ function MapView({ onLocationClick, route, heatmapVisible, safeLocationsVisible,
             .forEach(m => m.remove());
         markersRef.current = markersRef.current.filter(m => !m._safeMarker);
 
-        if (!safeLocationsVisible || !mapRef.current) return;
+        if (!safeLocationsVisible || !mapRef.current) {
+            if (onSafeLoadingChange) onSafeLoadingChange(false);
+            return;
+        }
 
         const center = mapRef.current.getCenter();
+
+        // Signal loading start
+        if (onSafeLoadingChange) onSafeLoadingChange(true);
 
         fetchSafePOIs(center.lng, center.lat).then(pois => {
             for (const poi of pois) {
                 const el = document.createElement('div');
-                el.style.width = '30px';
-                el.style.height = '30px';
+                el.style.width = '32px';
+                el.style.height = '32px';
                 el.style.borderRadius = '50%';
                 el.style.background = poi.color;
                 el.style.display = 'flex';
                 el.style.alignItems = 'center';
                 el.style.justifyContent = 'center';
                 el.style.fontSize = '15px';
-                el.style.boxShadow = `0 0 14px ${poi.color}60`;
                 el.style.cursor = 'pointer';
-                el.style.border = '2px solid rgba(255,255,255,0.4)';
+                el.style.border = poi.open_now === false
+                    ? '2px solid rgba(255,255,255,0.15)'
+                    : '2px solid rgba(255,255,255,0.5)';
+                el.style.boxShadow = poi.open_now === false
+                    ? `0 0 8px ${poi.color}30`
+                    : `0 0 14px ${poi.color}60`;
+                el.style.opacity = poi.open_now === false ? '0.55' : '1';
                 el.textContent = poi.icon;
 
-                const popup = new mapboxgl.Popup({ offset: 20, closeButton: true })
+                const statusBadge = poi.open_now === true
+                    ? '<span class="safe-popup-badge open">Open Now</span>'
+                    : poi.open_now === false
+                        ? '<span class="safe-popup-badge closed">Closed</span>'
+                        : '<span class="safe-popup-badge unknown">Hours N/A</span>';
+
+                const hoursHtml = poi.hours && poi.hours.length
+                    ? `<div class="safe-popup-hours">${poi.hours.join('<br>')}</div>`
+                    : '';
+
+                const popup = new mapboxgl.Popup({ offset: 20, closeButton: true, maxWidth: '260px' })
                     .setHTML(`
-            <div class="safe-popup-name">${poi.name}</div>
-            <div class="safe-popup-type">${poi.label}</div>
-            <div class="safe-popup-addr">${poi.address.split(',').slice(0, 2).join(',')}</div>
-          `);
+                        <div class="safe-popup-name">${poi.name}</div>
+                        <div class="safe-popup-meta">
+                            <span class="safe-popup-type">${poi.label}</span>
+                            ${statusBadge}
+                        </div>
+                        <div class="safe-popup-addr">${poi.address}</div>
+                        ${hoursHtml}
+                    `);
 
                 const marker = new mapboxgl.Marker({ element: el })
                     .setLngLat([poi.lng, poi.lat])
@@ -328,6 +343,9 @@ function MapView({ onLocationClick, route, heatmapVisible, safeLocationsVisible,
                 marker._safeMarker = true;
                 markersRef.current.push(marker);
             }
+        }).finally(() => {
+            // Signal loading complete
+            if (onSafeLoadingChange) onSafeLoadingChange(false);
         });
     }, [safeLocationsVisible]);
 

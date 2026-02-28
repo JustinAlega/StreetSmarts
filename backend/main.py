@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from db.database import init_db
-from routes import heatmap, routing, social, location_summary
+from routes import heatmap, routing, social, location_summary, safe_places
 
 
 @asynccontextmanager
@@ -45,6 +45,7 @@ app.include_router(heatmap.router)
 app.include_router(routing.router)
 app.include_router(social.router)
 app.include_router(location_summary.router)
+app.include_router(safe_places.router)
 
 
 @app.get("/")

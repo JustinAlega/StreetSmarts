@@ -216,6 +216,33 @@ body {
   font-size: 14px;
 }
 
+.header-btn.loading,
+.header-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  box-shadow: none;
+  transform: none;
+}
+
+.btn-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--text-muted);
+  border-top-color: var(--accent-primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 /* ============================================
    ROUTE PANEL
    ============================================ */
@@ -1045,7 +1072,14 @@ body {
 .safe-popup-name {
   font-weight: 600;
   font-size: 13px;
-  margin-bottom: 2px;
+  margin-bottom: 4px;
+}
+
+.safe-popup-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
 }
 
 .safe-popup-type {
@@ -1053,11 +1087,47 @@ body {
   color: var(--text-muted);
 }
 
+.safe-popup-badge {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: var(--radius-full);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.safe-popup-badge.open {
+  background: var(--safe-bg);
+  color: var(--safe);
+}
+
+.safe-popup-badge.closed {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.safe-popup-badge.unknown {
+  background: rgba(156, 163, 175, 0.15);
+  color: var(--text-muted);
+}
+
 .safe-popup-addr {
   font-size: 10px;
   color: var(--text-muted);
   margin-top: 2px;
-  opacity: 0.7;
+  line-height: 1.4;
+}
+
+.safe-popup-hours {
+  font-size: 9px;
+  color: var(--text-muted);
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border-subtle);
+  line-height: 1.5;
+  opacity: 0.8;
+  max-height: 80px;
+  overflow-y: auto;
 }
 
 /* Route result display */

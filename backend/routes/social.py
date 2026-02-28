@@ -59,7 +59,7 @@ Return ONLY valid JSON, no markdown, no explanation."""
 
     try:
         response = get_client().models.generate_content(
-            model="gemini-2.0-flash",
+            model="gemini-2.5-flash",
             contents=prompt
         )
         text = response.text.strip()
