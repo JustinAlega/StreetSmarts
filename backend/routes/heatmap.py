@@ -15,7 +15,7 @@ router = APIRouter()
 db = DBWriter()
 
 TILE_SIZE = 256
-KERNEL_RADIUS = 40  # pixels
+KERNEL_RADIUS = 80  # pixels
 
 
 def tile_to_latlng(z, x, y):
@@ -56,35 +56,51 @@ async def get_tile(z: int, x: int, y: int):
         img.save(buf, format="PNG")
         return Response(content=buf.getvalue(), media_type="image/png")
     
+    # Create a precomputed kernel
+    sigma = KERNEL_RADIUS / 2.5
+    k_size = int(KERNEL_RADIUS * 2 + 1)
+    y_g, x_g = np.ogrid[-KERNEL_RADIUS:KERNEL_RADIUS+1, -KERNEL_RADIUS:KERNEL_RADIUS+1]
+    dist_sq_kernel = x_g**2 + y_g**2
+    
+    # Mask to keep kernel strictly circular
+    kernel_mask = dist_sq_kernel <= KERNEL_RADIUS**2
+    base_kernel = np.exp(-dist_sq_kernel / (2 * sigma**2))
+    base_kernel[~kernel_mask] = 0.0
+
     # Accumulator arrays
     numerator = np.zeros((TILE_SIZE, TILE_SIZE), dtype=np.float64)
     denominator = np.zeros((TILE_SIZE, TILE_SIZE), dtype=np.float64)
     
-    sigma = KERNEL_RADIUS / 2.5
-    
     for pt in points:
-        # Max risk across all categories
         risk = max(pt.get(c, 0.0) for c in CATEGORIES)
         if risk < 0.01:
             continue
+            
+        px, py = latlng_to_pixel(pt["lat"], pt["lng"], lat_min, lat_max, lng_min, lng_max)
+        px_int, py_int = int(px), int(py)
+
+        # Bounds checking for the kernel slice vs the tile
+        x_start = max(0, px_int - KERNEL_RADIUS)
+        x_end = min(TILE_SIZE, px_int + KERNEL_RADIUS + 1)
+        y_start = max(0, py_int - KERNEL_RADIUS)
+        y_end = min(TILE_SIZE, py_int + KERNEL_RADIUS + 1)
         
-        px, py = latlng_to_pixel(pt["lat"], pt["lng"],
-                                  lat_min, lat_max, lng_min, lng_max)
+        if x_start >= x_end or y_start >= y_end:
+            continue
+            
+        # Determine where the kernel intersects the tile
+        k_x_start = x_start - (px_int - KERNEL_RADIUS)
+        k_x_end = k_x_start + (x_end - x_start)
+        k_y_start = y_start - (py_int - KERNEL_RADIUS)
+        k_y_end = k_y_start + (y_end - y_start)
+
+        # Slice kernel and add to accumulators
+        k_slice = base_kernel[k_y_start:k_y_end, k_x_start:k_x_end]
         
-        # Stamp Gaussian kernel
-        x_start = max(0, int(px - KERNEL_RADIUS))
-        x_end = min(TILE_SIZE, int(px + KERNEL_RADIUS))
-        y_start = max(0, int(py - KERNEL_RADIUS))
-        y_end = min(TILE_SIZE, int(py + KERNEL_RADIUS))
-        
-        for yi in range(y_start, y_end):
-            for xi in range(x_start, x_end):
-                dist_sq = (xi - px)**2 + (yi - py)**2
-                w = math.exp(-dist_sq / (2 * sigma**2))
-                numerator[yi, xi] += w * risk
-                denominator[yi, xi] += w
-    
-    # Compute weighted average
+        numerator[y_start:y_end, x_start:x_end] += k_slice * risk
+        denominator[y_start:y_end, x_start:x_end] += k_slice
+
+    # Compute weighted average where denominator > 0
     mask = denominator > 0
     heat = np.zeros_like(numerator)
     heat[mask] = numerator[mask] / denominator[mask]
@@ -92,21 +108,29 @@ async def get_tile(z: int, x: int, y: int):
     # Gamma correction
     heat = np.power(heat, 0.7)
     
-    # Color map to RGBA
+    # Vectorized color mapping
     rgba = np.zeros((TILE_SIZE, TILE_SIZE, 4), dtype=np.uint8)
     
-    for yi in range(TILE_SIZE):
-        for xi in range(TILE_SIZE):
-            v = heat[yi, xi]
-            if v < 0.01:
-                continue
-            
-            r = int(min(255, v * 255 * 1.5))
-            g = int(max(0, 255 * (1 - v * 2))) if v < 0.5 else 0
-            b = 0
-            a = int(25 + 200 * (1 - math.exp(-3 * v)))
-            
-            rgba[yi, xi] = [r, g, b, a]
+    # condition where heat is meaningful
+    valid = heat >= 0.01
+    v_valid = heat[valid]
+    
+    # Red: min(255, v * 255 * 1.5)
+    r = np.clip(v_valid * 255 * 1.5, 0, 255).astype(np.uint8)
+    
+    # Green: max(0, 255 * (1 - v * 2)) if v < 0.5 else 0
+    g = np.where(v_valid < 0.5, np.clip(255 * (1 - v_valid * 2), 0, 255), 0).astype(np.uint8)
+    
+    # Blue: always 0 for safety heatmaps
+    b = np.zeros_like(v_valid, dtype=np.uint8)
+    
+    # Alpha: int(25 + 200 * (1 - math.exp(-3 * v)))
+    a = np.clip(25 + 200 * (1 - np.exp(-3 * v_valid)), 0, 255).astype(np.uint8)
+    
+    rgba[valid, 0] = r
+    rgba[valid, 1] = g
+    rgba[valid, 2] = b
+    rgba[valid, 3] = a
     
     img = Image.fromarray(rgba, "RGBA")
     buf = io.BytesIO()

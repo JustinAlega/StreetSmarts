@@ -13,7 +13,8 @@ from typing import Optional
 from db.db_writer import DBWriter, CATEGORIES
 from dotenv import load_dotenv
 
-load_dotenv()
+env_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), '.env')
+load_dotenv(env_path)
 
 router = APIRouter()
 db = DBWriter()
