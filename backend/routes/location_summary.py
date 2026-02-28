@@ -58,32 +58,32 @@ async def get_location_summary(lat: float, lng: float, radius_km: float = 1.0):
     truth_vec = {}
     if truth:
         truth_vec = {c: round(truth.get(c, 0.0), 3) for c in CATEGORIES}
-        # Blend post averages with truth (60% truth, 40% posts)
+        # Blend post averages with truth
+        # If there are posts, we'll factor them in, otherwise we stick 100% to truth
+        has_posts = len(posts) > 0
         for c in CATEGORIES:
-            blended = 0.6 * truth_vec.get(c, 0.0) + 0.4 * cat_averages.get(c, 0.0)
+            if has_posts:
+                # 60% truth, 40% posts weighting if posts exist
+                blended = 0.6 * truth_vec.get(c, 0.0) + 0.4 * cat_averages.get(c, 0.0)
+            else:
+                blended = truth_vec.get(c, 0.0)
             cat_averages[c] = round(blended, 3)
     
     # --- Improved risk scoring ---
-    # Use a weighted sum of top categories, not just the max
-    # This produces more realistic and varied scores
+    # The heatmap and routing rely on the MAXIMUM risk category.
+    # Align the location summary strictly with this metric so colors match the UI number.
     sorted_vals = sorted(cat_averages.values(), reverse=True)
+    max_risk = sorted_vals[0] if sorted_vals else 0.0
     
-    if len(sorted_vals) >= 3:
-        # Weighted: top1 * 0.5 + top2 * 0.3 + top3 * 0.2
-        composite = sorted_vals[0] * 0.5 + sorted_vals[1] * 0.3 + sorted_vals[2] * 0.2
-    else:
-        composite = sorted_vals[0] if sorted_vals else 0.0
-    
-    # Scale to 0-100 with amplification
-    # The raw values from Gaussian blending are typically 0.05-0.40
-    # We want to map this to roughly 20-85 range for meaningful variation
-    import math
-    amplified = 1 - math.exp(-4.0 * composite)  # exponential stretch
+    # Since our truth values hit a maximum of 1.0 directly from data seeding
+    # we can map this naturally into the 0-100 score format.
+    # Using a slight exponential pop to guarantee deep red visually matches 90+ score.
+    amplified = max_risk ** 0.8
     risk_score = round(amplified * 100, 1)
     
     # Ensure minimum meaningful score (urban areas always have some baseline risk)
     if truth_vec:
-        risk_score = max(risk_score, 15.0)
+        risk_score = max(risk_score, 10.0)
     
     # Top 3 hotspots
     sorted_cats = sorted(cat_averages.items(), key=lambda x: x[1], reverse=True)
