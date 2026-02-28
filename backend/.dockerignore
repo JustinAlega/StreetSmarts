@@ -1,0 +1,11 @@
+venv/
+__pycache__/
+*.py[cod]
+.env
+*.db
+*.graphml
+.git/
+.gitignore
+*.egg-info/
+dist/
+build/

@@ -1,0 +1,32 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+dist/
+build/
+venv/
+.env
+
+# ---- SQLite ----
+*.db
+
+# ---- OSMnx cached graph ----
+*.graphml
+
+# ---- Node / Frontend ----
+node_modules/
+frontend/dist/
+
+# ---- IDE ----
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ---- OS ----
+.DS_Store
+Thumbs.db
+
+# ---- Docker ----
+backend-data/

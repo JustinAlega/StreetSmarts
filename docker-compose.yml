@@ -1,0 +1,28 @@
+# PickHacksSP26 — Docker Compose
+# Usage:
+#   cp .env.example .env   # fill in your keys
+#   docker compose up -d   # start backend
+#   docker compose logs -f  # watch logs
+#   docker compose down     # stop
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    volumes:
+      - backend-data:/app/persistent
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  backend-data:

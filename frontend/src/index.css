@@ -1,0 +1,65 @@
+/**
+ * Global styles — design tokens & layout.
+ * Owner: Person 4 (Frontend UI + Features)
+ *
+ * Person 3 should only add styles inside .map-container or .route-panel sections.
+ * Person 4 owns everything else (header, sidebar, feed, legend, typography).
+ */
+
+/* ============ Design Tokens ============ */
+:root {
+  --color-bg: #0f1117;
+  --color-surface: #1a1d27;
+  --color-surface-hover: #242836;
+  --color-border: #2a2e3a;
+  --color-text: #e4e6ec;
+  --color-text-secondary: #8b8fa3;
+  --color-accent: #6c63ff;
+  --color-accent-hover: #7b73ff;
+  --color-danger: #ff4d4f;
+  --color-warning: #faad14;
+  --color-safe: #52c41a;
+  --font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --radius: 8px;
+  --radius-lg: 12px;
+  --shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+/* ============ Reset ============ */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-family);
+  background: var(--color-bg);
+  color: var(--color-text);
+  min-height: 100vh;
+}
+
+/* ============ Layout ============ */
+.app-layout {
+  display: flex;
+  height: calc(100vh - 56px); /* subtract header height */
+}
+
+.map-container {
+  /* Person 3: map styles go here */
+  flex: 1;
+  position: relative;
+}
+
+.sidebar {
+  width: 380px;
+  background: var(--color-surface);
+  border-left: 1px solid var(--color-border);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+/* ============ Shared Component Styles ============ */
+/* Person 4: add component-specific styles below */
