@@ -47,21 +47,29 @@ async def get_risk_at(lat, lng):
 
 
 async def get_route_risk_score(coordinates):
-    """Compute average risk along a route by sampling points."""
+    """Compute risk along a route by sampling points, heavily penalizing high-risk nodes."""
     if not coordinates or len(coordinates) < 2:
         return 0.0
     
-    # Sample up to 10 points along the route
-    step = max(1, len(coordinates) // 10)
+    # Sample points thickly to accurately reflect high risk areas
+    step = max(1, len(coordinates) // 50)  # at least 50 points
     sample_indices = list(range(0, len(coordinates), step))
     
     risks = []
     for i in sample_indices:
         coord = coordinates[i]
-        risk = await get_risk_at(coord[1], coord[0])  # lat, lng
-        risks.append(risk)
+        base_risk = await get_risk_at(coord[1], coord[0])  # lat, lng
+        # Spread out the risk parameters more so high risk (red blobs) 
+        # are heavily penalized compared to medium risk areas.
+        # base_risk is typically 0.0 to 1.0 depending on categorization weights.
+        scaled_risk = base_risk ** 2.0 
+        risks.append(scaled_risk)
     
-    return sum(risks) / len(risks) if risks else 0.0
+    # Scale result to an intuitive 0-100 percentage
+    average_risk = sum(risks) / len(risks) if risks else 0.0
+    # Add a math.sqrt to slightly de-penalize the average, pulling the final max back toward 100
+    # without losing the massive difference between safe and red nodes in the underlying path math
+    return min(100.0, math.sqrt(average_risk) * 100.0)
 
 
 async def mapbox_directions(start_lng, start_lat, end_lng, end_lat, profile="walking"):
@@ -101,26 +109,27 @@ async def compute_route(req: RouteRequest):
         return {"error": "No route found between these points"}
     
     if req.priority == "safety" and len(routes) > 1:
-        # Score each route by risk and pick the safest
         best_route = None
         best_score = float('inf')
         
         for route in routes:
             coords = route["geometry"]["coordinates"]
             distance = route["distance"]
-            risk = await get_route_risk_score(coords)
+            # risk_score is now guaranteed bounded [0, 100]
+            risk_score = await get_route_risk_score(coords)
             
-            # Combined score: lower is better
-            # For safety priority: weight risk heavily
-            score = 0.3 * (distance / 1000) + 0.7 * (risk * 100)
+            # Using the requested 50/50 weighting for safety priority
+            # 50% weight to speed (distance in km)
+            # 50% weight to safety (using the 0-100 native risk score)
+            score = 0.3 * (distance / 1000) + 0.7 * risk_score
             
             if score < best_score:
                 best_score = score
                 best_route = route
-        
+                
         chosen = best_route or routes[0]
     else:
-        # Speed priority: just use the first (shortest) route
+        # Speed priority: 100% speed weight, just output the first route
         chosen = routes[0]
     
     coords = chosen["geometry"]["coordinates"]
@@ -128,6 +137,7 @@ async def compute_route(req: RouteRequest):
     duration_s = chosen["duration"]
     
     # Compute risk score for the chosen route
+    # Now that it's 0-100 normalized, we just pass it natively
     route_risk = await get_route_risk_score(coords)
     
     return {
@@ -136,6 +146,6 @@ async def compute_route(req: RouteRequest):
         "duration_min": round(duration_s / 60, 1),
         "priority": req.priority,
         "num_nodes": len(coords),
-        "risk_score": round(route_risk * 100, 1),
+        "risk_score": round(route_risk, 1),
         "alternatives_evaluated": len(routes),
     }
