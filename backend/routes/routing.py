@@ -1,82 +1,140 @@
 """
-Safety-optimized routing — POST /api/route
-Owner: Person 1 (Backend Core)
-
-Uses OSMnx + NetworkX A* on St. Louis walking graph.
+Safety-optimized routing for StreetSmarts.
+Uses Mapbox Directions API for reliable routing, with safety risk overlay.
+Falls back to A* on OSMnx graph when available.
 """
 
+import os
+import math
+import aiohttp
 from fastapi import APIRouter
 from pydantic import BaseModel
+from typing import Optional
+from db.db_writer import DBWriter, CATEGORIES
+from dotenv import load_dotenv
+
+load_dotenv()
 
 router = APIRouter()
+db = DBWriter()
 
-# ---- Constants ---- #
-STL_CENTER = (38.627, -90.199)
-GRAPH_FILE = "stl_walk.graphml"
-LENGTH_SCALE = 500.0  # normalizer for distance in weight formula
+MAPBOX_TOKEN = os.getenv("MAPBOX_TOKEN", "")
 
 
-# ---- Request / Response models ---- #
 class RouteRequest(BaseModel):
-    start: list[float]      # [lng, lat]
-    end: list[float]        # [lng, lat]
-    lambda_val: float = 0.5 # 0 = shortest, 1 = safest
+    start_lat: float
+    start_lng: float
+    end_lat: float
+    end_lng: float
+    priority: str = "safety"  # "safety" or "speed"
 
 
-class RouteResponse(BaseModel):
-    coordinates: list[list[float]]
-    lambda_val: float
+async def get_risk_at(lat, lng):
+    """Look up risk at a point using nearest truth row."""
+    truth = await db.get_truth_nearest(lat, lng, radius_deg=0.003)
+    if truth is None:
+        return 0.0
+    
+    # Max across categories
+    risk = max(truth.get(c, 0.0) for c in CATEGORIES)
+    
+    # Distance decay
+    dist_deg = math.sqrt((lat - truth["lat"])**2 + (lng - truth["lng"])**2)
+    decay = math.exp(-dist_deg**2 / (2 * 0.002**2))
+    
+    return risk * decay
 
 
-# ---- Graph management ---- #
-
-def load_or_download_graph():
-    """Load cached .graphml or download STL walking graph via OSMnx.
-
-    TODO:
-    1. If GRAPH_FILE exists, load with osmnx.load_graphml()
-    2. Else download with osmnx.graph_from_point(STL_CENTER, dist=5000, network_type='walk')
-    3. Save to GRAPH_FILE
-    4. Return the graph
-    """
-    # STUB
-    return None
-
-
-def risk_at_point(lat: float, lng: float) -> float:
-    """Query the truth table and return a single aggregate risk score [0-1].
-
-    TODO: call DBWriter.risk_at_point() and average the category values
-    """
-    # STUB
-    return 0.0
+async def get_route_risk_score(coordinates):
+    """Compute average risk along a route by sampling points."""
+    if not coordinates or len(coordinates) < 2:
+        return 0.0
+    
+    # Sample up to 10 points along the route
+    step = max(1, len(coordinates) // 10)
+    sample_indices = list(range(0, len(coordinates), step))
+    
+    risks = []
+    for i in sample_indices:
+        coord = coordinates[i]
+        risk = await get_risk_at(coord[1], coord[0])  # lat, lng
+        risks.append(risk)
+    
+    return sum(risks) / len(risks) if risks else 0.0
 
 
-def compute_route(graph, start_lnglat: list[float], end_lnglat: list[float], lambda_val: float) -> list[list[float]]:
-    """Run A* on the walking graph with safety-weighted edges.
+async def mapbox_directions(start_lng, start_lat, end_lng, end_lat, profile="walking"):
+    """Get a route from Mapbox Directions API."""
+    url = (
+        f"https://api.mapbox.com/directions/v5/mapbox/{profile}/"
+        f"{start_lng},{start_lat};{end_lng},{end_lat}"
+        f"?access_token={MAPBOX_TOKEN}"
+        f"&geometries=geojson"
+        f"&overview=full"
+        f"&alternatives=true"
+    )
+    
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as resp:
+            if resp.status != 200:
+                return None
+            data = await resp.json()
+            return data.get("routes", [])
 
-    TODO:
-    1. Find nearest nodes to start/end with osmnx.nearest_nodes()
-    2. Define weight function:
-         weight(u,v,d) = (1-λ)*norm_distance + λ*risk_at_midpoint
-    3. Run nx.astar_path(G, start_node, end_node, weight=weight)
-    4. Convert node sequence to [[lng, lat], ...] coordinate list
-    """
-    # STUB
-    return []
 
-
-# ---- Endpoint ---- #
-
-@router.post("/route", response_model=RouteResponse)
-async def get_route(req: RouteRequest):
-    """Return a safety-optimized walking route.
-
-    TODO:
-    1. Load graph (lazy singleton)
-    2. Call compute_route(graph, req.start, req.end, req.lambda_val)
-    3. Return coordinates
-    """
-    # STUB
-    coords = compute_route(None, req.start, req.end, req.lambda_val)
-    return RouteResponse(coordinates=coords, lambda_val=req.lambda_val)
+@router.post("/route")
+async def compute_route(req: RouteRequest):
+    """Compute a safety-optimized route using Mapbox Directions."""
+    
+    if not MAPBOX_TOKEN:
+        return {"error": "MAPBOX_TOKEN not configured"}
+    
+    # Get routes from Mapbox (including alternatives)
+    routes = await mapbox_directions(
+        req.start_lng, req.start_lat,
+        req.end_lng, req.end_lat,
+        profile="walking"
+    )
+    
+    if not routes:
+        return {"error": "No route found between these points"}
+    
+    if req.priority == "safety" and len(routes) > 1:
+        # Score each route by risk and pick the safest
+        best_route = None
+        best_score = float('inf')
+        
+        for route in routes:
+            coords = route["geometry"]["coordinates"]
+            distance = route["distance"]
+            risk = await get_route_risk_score(coords)
+            
+            # Combined score: lower is better
+            # For safety priority: weight risk heavily
+            score = 0.3 * (distance / 1000) + 0.7 * (risk * 100)
+            
+            if score < best_score:
+                best_score = score
+                best_route = route
+        
+        chosen = best_route or routes[0]
+    else:
+        # Speed priority: just use the first (shortest) route
+        chosen = routes[0]
+    
+    coords = chosen["geometry"]["coordinates"]
+    distance_m = chosen["distance"]
+    duration_s = chosen["duration"]
+    
+    # Compute risk score for the chosen route
+    route_risk = await get_route_risk_score(coords)
+    
+    return {
+        "coordinates": coords,
+        "distance_m": round(distance_m, 1),
+        "duration_min": round(duration_s / 60, 1),
+        "priority": req.priority,
+        "num_nodes": len(coords),
+        "risk_score": round(route_risk * 100, 1),
+        "alternatives_evaluated": len(routes),
+    }

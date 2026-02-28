@@ -1,32 +1,29 @@
-# PickHacksSP26 — Backend Dockerfile
-# Build:  docker compose build
-# Run:    docker compose up -d
+FROM python:3.11-slim
 
-FROM python:3.11-slim AS base
-
-# ---- System deps for OSMnx / GDAL / spatial libs ----
-RUN apt-get update && apt-get install -y --no-install-recommends \
-        gcc g++ \
-        libgdal-dev \
-        libspatialindex-dev \
-        curl \
+# 1. Install system dependencies for GIS and C-extensions
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    libgdal-dev \
+    libproj-dev \
+    g++ \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# ---- Python deps (cached layer) ----
+# 2. Copy and install requirements
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# ---- Application code ----
+# 3. Copy the rest of the application
 COPY . .
 
-# ---- Persistent data directory ----
-# SQLite DB and OSMnx graph cache live here so they survive restarts
-RUN mkdir -p /app/persistent
-ENV DB_DIR=/app/persistent
+# 4. Create data directory for persistent DB and copy seed DB if present
+RUN mkdir -p /app/data /app/cache \
+    && if [ -f /app/app.db ]; then cp /app/app.db /app/data/app.db; fi
 
+# 5. Expose FastAPI's default port
 EXPOSE 8000
 
-# ---- Entrypoint ----
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+# 6. Start the server using Uvicorn with 2 workers for production
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]

@@ -1,60 +1,58 @@
 """
-Database initialization — creates SQLite tables.
-Owner: Person 1 (Backend Core)
-
-Other modules import `init_db()` and `get_connection()` from here.
-Nobody else should touch this file.
+Database schema and initialization for StreetSmarts.
+SQLite database with two core tables:
+  - posts: community reports and AI-generated incident posts
+  - truth: per-location risk vectors with 8 category scores
 """
 
-import sqlite3
+import aiosqlite
 import os
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "..", "app.db")
+DB_PATH = os.environ.get("DB_PATH", os.path.join(os.path.dirname(os.path.dirname(__file__)), "app.db"))
+
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS posts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    lat REAL NOT NULL,
+    lng REAL NOT NULL,
+    content TEXT NOT NULL,
+    severity REAL DEFAULT 0.0,
+    category TEXT DEFAULT 'other',
+    human INTEGER DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS truth (
+    lat REAL NOT NULL,
+    lng REAL NOT NULL,
+    crime REAL DEFAULT 0.0,
+    public_safety REAL DEFAULT 0.0,
+    transport REAL DEFAULT 0.0,
+    infrastructure REAL DEFAULT 0.0,
+    policy REAL DEFAULT 0.0,
+    protest REAL DEFAULT 0.0,
+    weather REAL DEFAULT 0.0,
+    other REAL DEFAULT 0.0,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (lat, lng)
+);
+
+CREATE INDEX IF NOT EXISTS idx_truth_coords ON truth(lat, lng);
+CREATE INDEX IF NOT EXISTS idx_posts_coords ON posts(lat, lng);
+CREATE INDEX IF NOT EXISTS idx_posts_created ON posts(created_at DESC);
+"""
 
 
-def get_connection() -> sqlite3.Connection:
-    """Return a new SQLite connection. Caller must close it."""
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
+async def init_db():
+    """Initialize the database with schema."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.executescript(SCHEMA)
+        await db.commit()
+    print(f"[DB] Database initialized at {DB_PATH}")
 
 
-def init_db() -> None:
-    """Create tables if they don't exist.
-    Called once at app startup from main.py.
-    """
-    conn = get_connection()
-    cur = conn.cursor()
-
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS truth (
-            lat REAL NOT NULL,
-            long REAL NOT NULL,
-            crime REAL DEFAULT 0.0,
-            public_safety REAL DEFAULT 0.0,
-            transport REAL DEFAULT 0.0,
-            infrastructure REAL DEFAULT 0.0,
-            violent_crime REAL DEFAULT 0.0,
-            property_crime REAL DEFAULT 0.0,
-            weather REAL DEFAULT 0.0,
-            other REAL DEFAULT 0.0,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            PRIMARY KEY (lat, long)
-        )
-    """)
-
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS posts (
-            id TEXT PRIMARY KEY,
-            lat REAL NOT NULL,
-            long REAL NOT NULL,
-            severity REAL DEFAULT 0.0,
-            category TEXT DEFAULT 'other',
-            human INTEGER DEFAULT 1,
-            content TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-
-    conn.commit()
-    conn.close()
+async def get_db():
+    """Get a database connection."""
+    db = await aiosqlite.connect(DB_PATH)
+    db.row_factory = aiosqlite.Row
+    return db

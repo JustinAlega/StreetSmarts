@@ -1,20 +1,31 @@
 """
-Social endpoints — POST /api/post + GET /api/feed
-Owner: Person 2 (Backend Data + AI)
-
-Handles community reports: classify with Gemini, store, and retrieve.
+Social feed routes for StreetSmarts.
+Handles community reports (POST /post) and feed retrieval (GET /feed).
+Uses Gemini for post classification.
 """
 
-from fastapi import APIRouter, Query
+import os
+import json
+from fastapi import APIRouter
 from pydantic import BaseModel
-
+from typing import Optional
 from db.db_writer import DBWriter
-from ai.gemini_classifier import classify_post
+from google import genai
+from dotenv import load_dotenv
+
+load_dotenv()
+
+_client = None
+
+def get_client():
+    global _client
+    if _client is None:
+        _client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+    return _client
 
 router = APIRouter()
+db = DBWriter()
 
-
-# ---- Request / Response models ---- #
 
 class PostRequest(BaseModel):
     lat: float
@@ -22,49 +33,81 @@ class PostRequest(BaseModel):
     content: str
 
 
-class PostResponse(BaseModel):
-    id: str
-    severity: float
-    category: str
+class FeedRequest(BaseModel):
+    lat: float
+    lng: float
+    radius_km: float = 2.0
 
 
-# ---- Endpoints ---- #
+async def classify_post(content: str) -> dict:
+    """Use Gemini to classify a community post for severity and category."""
+    prompt = f"""You are a safety report classifier for Saint Louis, MO.
+Analyze this community report and return a JSON object with:
+- "severity": float 0.0-1.0 (0=benign, 1=critical emergency)
+- "category": one of ["crime", "public_safety", "transport", "infrastructure", "policy", "protest", "weather", "other"]
 
-@router.post("/post", response_model=PostResponse)
+Be precise. Consider:
+- 0.0-0.2: Minor observations (e.g. "street light flickering")
+- 0.2-0.4: Noteworthy but low risk (e.g. "lots of parked cars blocking view")
+- 0.4-0.6: Moderate concern (e.g. "someone acting suspiciously")
+- 0.6-0.8: Significant safety issue (e.g. "break-in reported on Main St")
+- 0.8-1.0: Critical / imminent danger (e.g. "active shooter", "building collapse")
+
+Report: "{content}"
+
+Return ONLY valid JSON, no markdown, no explanation."""
+
+    try:
+        response = get_client().models.generate_content(
+            model="gemini-2.0-flash",
+            contents=prompt
+        )
+        text = response.text.strip()
+        # Remove markdown code fences if present
+        if text.startswith("```"):
+            text = text.split("\n", 1)[1]
+            text = text.rsplit("```", 1)[0]
+        result = json.loads(text)
+        return {
+            "severity": float(result.get("severity", 0.3)),
+            "category": result.get("category", "other")
+        }
+    except Exception as e:
+        print(f"[SOCIAL] Classification error: {e}")
+        return {"severity": 0.3, "category": "other"}
+
+
+@router.post("/post")
 async def create_post(req: PostRequest):
-    """Classify a community report with Gemini, store it, and update truth table.
-
-    TODO:
-    1. Call classify_post(req.content) → {severity, category}
-    2. Call DBWriter.insert_post(req.lat, req.lng, req.content, severity, category)
-    3. Call DBWriter.upsert_truth(req.lat, req.lng, category, severity)
-    4. Return post id + classification
-    """
-    # STUB
-    classification = classify_post(req.content)
-    severity = classification.get("severity", 0.0)
-    category = classification.get("category", "other")
-
-    post_id = DBWriter.insert_post(
-        lat=req.lat, lng=req.lng,
+    """Create a new community safety report."""
+    classification = await classify_post(req.content)
+    
+    await db.insert_post(
+        lat=req.lat,
+        lng=req.lng,
         content=req.content,
-        severity=severity,
-        category=category,
+        severity=classification["severity"],
+        category=classification["category"],
+        human=True
     )
-
-    DBWriter.upsert_truth(req.lat, req.lng, category, severity)
-
-    return PostResponse(id=post_id, severity=severity, category=category)
+    
+    # Update truth table
+    await db.update_truth(
+        lat=req.lat,
+        lng=req.lng,
+        category=classification["category"],
+        severity=classification["severity"]
+    )
+    
+    return {
+        "status": "ok",
+        "severity": classification["severity"],
+        "category": classification["category"]
+    }
 
 
 @router.get("/feed")
-async def get_feed(
-    lat: float = Query(...),
-    lng: float = Query(...),
-    radius: float = Query(500.0, description="Search radius in meters"),
-):
-    """Return nearby posts sorted by recency.
-
-    TODO: this is wired up — just needs DBWriter.get_feed() implemented.
-    """
-    return DBWriter.get_feed(lat, lng, radius_m=radius)
+async def get_feed(lat: float, lng: float, radius_km: float = 2.0):
+    """Get recent community reports near a location."""
+    posts = await db.get_feed(lat, lng, radius_km)
+    return {"posts": posts, "count": len(posts)}

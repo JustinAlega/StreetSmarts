@@ -1,125 +1,164 @@
 """
-DBWriter — all database read/write operations.
-Owner: Person 1 (Backend Core) — others call these methods, don't write raw SQL.
-
-This is the ONLY place that runs INSERT / UPDATE / SELECT on the DB.
-Route handlers and data scripts import DBWriter and call its methods.
+Database access layer for StreetSmarts.
+Handles all CRUD operations for the posts and truth tables.
+Uses exponential moving average (EMA) for truth updates.
 """
 
-import sqlite3
-import uuid
-from typing import Optional
+import aiosqlite
+import math
+from .database import DB_PATH
 
-from db.database import get_connection
-
-# Categories used across the project
-CATEGORIES = [
-    "crime", "public_safety", "transport", "infrastructure",
-    "violent_crime", "property_crime", "weather", "other",
-]
-
-# Exponential moving average alpha for truth updates
-EMA_ALPHA = 0.25
+CATEGORIES = ["crime", "public_safety", "transport", "infrastructure",
+               "policy", "protest", "weather", "other"]
 
 
 class DBWriter:
-    """Stateless helper — every method opens and closes its own connection."""
+    """Provides all database CRUD operations."""
 
-    # ------------------------------------------------------------------ #
-    #  TRUTH TABLE
-    # ------------------------------------------------------------------ #
+    def __init__(self):
+        self.db_path = DB_PATH
+        self.alpha = 0.25  # EMA smoothing factor
+
+    def _connect(self):
+        """Get an async context manager for a database connection."""
+        return aiosqlite.connect(self.db_path)
+
+    async def insert_post(self, lat: float, lng: float, content: str,
+                          severity: float = 0.0, category: str = "other",
+                          human: bool = True):
+        """Insert a new community or AI post."""
+        async with self._connect() as db:
+            db.row_factory = aiosqlite.Row
+            await db.execute(
+                """INSERT INTO posts (lat, lng, content, severity, category, human)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (lat, lng, content, severity, category, 1 if human else 0)
+            )
+            await db.commit()
+
+    async def update_truth(self, lat: float, lng: float, category: str,
+                           severity: float, alpha: float = None):
+        """Update truth table using exponential moving average (EMA).
+        new = (1 - alpha) * old + alpha * severity
+        """
+        if alpha is None:
+            alpha = self.alpha
+
+        lat_r = round(lat, 5)
+        lng_r = round(lng, 5)
+
+        async with self._connect() as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute(
+                "SELECT * FROM truth WHERE lat = ? AND lng = ?",
+                (lat_r, lng_r)
+            )
+            row = await cursor.fetchone()
+
+            if row is None:
+                cols = {c: 0.0 for c in CATEGORIES}
+                cols[category] = severity
+                placeholders = ", ".join(["?"] * (len(CATEGORIES) + 2))
+                col_names = "lat, lng, " + ", ".join(CATEGORIES)
+                values = [lat_r, lng_r] + [cols[c] for c in CATEGORIES]
+                await db.execute(
+                    f"INSERT INTO truth ({col_names}) VALUES ({placeholders})",
+                    values
+                )
+            else:
+                old_val = row[category] if category in CATEGORIES else 0.0
+                new_val = (1 - alpha) * old_val + alpha * severity
+                await db.execute(
+                    f"UPDATE truth SET {category} = ?, updated_at = CURRENT_TIMESTAMP WHERE lat = ? AND lng = ?",
+                    (new_val, lat_r, lng_r)
+                )
+            await db.commit()
+
+    async def get_truth(self, lat: float, lng: float):
+        """Exact-match lookup of truth vector at coordinates."""
+        lat_r = round(lat, 5)
+        lng_r = round(lng, 5)
+        async with self._connect() as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute(
+                "SELECT * FROM truth WHERE lat = ? AND lng = ?",
+                (lat_r, lng_r)
+            )
+            row = await cursor.fetchone()
+            if row:
+                return dict(row)
+            return None
+
+    async def get_truth_nearest(self, lat: float, lng: float, radius_deg: float = 0.005):
+        """Nearest-neighbor lookup using Euclidean approximation."""
+        async with self._connect() as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute(
+                """SELECT *, 
+                   (lat - ?) * (lat - ?) + (lng - ?) * (lng - ?) AS dist_sq
+                   FROM truth
+                   WHERE lat BETWEEN ? AND ? AND lng BETWEEN ? AND ?
+                   ORDER BY dist_sq ASC LIMIT 1""",
+                (lat, lat, lng, lng,
+                 lat - radius_deg, lat + radius_deg,
+                 lng - radius_deg, lng + radius_deg)
+            )
+            row = await cursor.fetchone()
+            if row:
+                return dict(row)
+            return None
+
+    async def get_truth_in_bounds(self, lat_min: float, lat_max: float,
+                                  lng_min: float, lng_max: float):
+        """Get all truth rows within bounding box."""
+        async with self._connect() as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute(
+                """SELECT * FROM truth 
+                   WHERE lat BETWEEN ? AND ? AND lng BETWEEN ? AND ?""",
+                (lat_min, lat_max, lng_min, lng_max)
+            )
+            rows = await cursor.fetchall()
+            return [dict(r) for r in rows]
+
+    async def get_feed(self, lat: float, lng: float, radius_km: float = 2.0,
+                       limit: int = 50):
+        """Fetch recent posts within radius, using haversine distance."""
+        # approx degree offset for prefilter
+        deg_offset = radius_km / 111.0
+        async with self._connect() as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute(
+                """SELECT * FROM posts
+                   WHERE lat BETWEEN ? AND ? AND lng BETWEEN ? AND ?
+                   ORDER BY created_at DESC LIMIT ?""",
+                (lat - deg_offset, lat + deg_offset,
+                 lng - deg_offset, lng + deg_offset, limit)
+            )
+            rows = await cursor.fetchall()
+            results = []
+            for r in rows:
+                d = dict(r)
+                # compute haversine distance
+                d["distance_km"] = self._haversine(lat, lng, d["lat"], d["lng"])
+                if d["distance_km"] <= radius_km:
+                    results.append(d)
+            return results
+
+    async def count_truth_rows(self):
+        """Count total rows in truth table."""
+        async with self._connect() as db:
+            cursor = await db.execute("SELECT COUNT(*) FROM truth")
+            row = await cursor.fetchone()
+            return row[0] if row else 0
 
     @staticmethod
-    def get_heatmap_points(
-        min_lat: float, max_lat: float,
-        min_lng: float, max_lng: float,
-    ) -> list[dict]:
-        """Return truth rows inside a bounding box as list of dicts.
-
-        Used by: routes/heatmap.py
-        TODO: implement query + build list of dicts
-        """
-        # STUB
-        return []
-
-    @staticmethod
-    def risk_at_point(lat: float, lng: float, radius_m: float = 300.0) -> dict:
-        """Return averaged risk scores near a lat/lng.
-
-        Used by: routes/routing.py (edge weight), routes/location_summary.py
-        TODO: query truth rows within radius, average each category
-        """
-        # STUB — return zero-risk placeholder
-        return {cat: 0.0 for cat in CATEGORIES}
-
-    @staticmethod
-    def upsert_truth(lat: float, lng: float, category: str, severity: float) -> None:
-        """Insert or EMA-update a single truth cell.
-
-        Used by: data/seed_truth.py, routes/social.py (after post classification)
-        TODO: INSERT … ON CONFLICT UPDATE with EMA formula
-        """
-        # STUB
-        pass
-
-    @staticmethod
-    def bulk_upsert_truth(rows: list[dict]) -> None:
-        """Batch-insert many truth rows (used by seed_truth.py).
-
-        Each dict: {lat, lng, category, severity}
-        TODO: wrap upsert_truth in a transaction
-        """
-        # STUB
-        pass
-
-    # ------------------------------------------------------------------ #
-    #  POSTS TABLE
-    # ------------------------------------------------------------------ #
-
-    @staticmethod
-    def insert_post(
-        lat: float, lng: float,
-        content: str,
-        severity: float,
-        category: str,
-        human: bool = True,
-    ) -> str:
-        """Insert a community report and return the new post id.
-
-        Used by: routes/social.py
-        TODO: generate uuid, insert row, return id
-        """
-        # STUB
-        post_id = str(uuid.uuid4())
-        return post_id
-
-    @staticmethod
-    def get_feed(
-        lat: float, lng: float,
-        radius_m: float = 500.0,
-        limit: int = 50,
-    ) -> list[dict]:
-        """Return nearby posts sorted by recency.
-
-        Used by: routes/social.py
-        TODO: haversine filter + ORDER BY created_at DESC
-        """
-        # STUB
-        return []
-
-    @staticmethod
-    def get_location_summary(lat: float, lng: float, radius_m: float = 500.0) -> dict:
-        """Aggregate truth + posts near a point for the summary panel.
-
-        Used by: routes/location_summary.py
-        TODO: combine risk_at_point + count nearby posts + generate label
-        """
-        # STUB
-        return {
-            "risk_score": 0,
-            "risk_label": "Unknown",
-            "nearby_posts": 0,
-            "recommendation": "",
-            "truth": {cat: 0.0 for cat in CATEGORIES},
-            "hotspots": [],
-        }
+    def _haversine(lat1, lng1, lat2, lng2):
+        """Calculate haversine distance in km."""
+        R = 6371.0
+        dlat = math.radians(lat2 - lat1)
+        dlng = math.radians(lng2 - lng1)
+        a = (math.sin(dlat / 2) ** 2 +
+             math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) *
+             math.sin(dlng / 2) ** 2)
+        return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
