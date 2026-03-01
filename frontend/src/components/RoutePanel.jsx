@@ -124,7 +124,7 @@ function RoutePanel({ onRouteComputed, onResetRoute }) {
 
     return (
         <div className="route-panel glass">
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
                 <h2 style={{ margin: 0 }}>
                     <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                         <svg viewBox="0 0 24 24" fill="none" width="20" height="20" xmlns="http://www.w3.org/2000/svg">
