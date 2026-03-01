@@ -14,7 +14,7 @@ _client = AsyncOpenAI(
 class ValidatorAgent:
     """Validates scraped news items using Vultr-hosted Llama 3 for plausibility assessment."""
     
-    def __init__(self, model_name="deepseek-r1-distill-qwen-32b"):
+    def __init__(self, model_name="gpt-oss-120b"):
         self.model = model_name
 
     async def validate(self, article: dict) -> dict:
