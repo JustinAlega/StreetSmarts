@@ -22,8 +22,8 @@ KEYWORDS = [
 ]
 
 
-def generate_queries():
-    """Generate search queries for all monitored locations."""
+def generate_queries(limit: int = None, offset: int = 0):
+    """Generate search queries. Use limit/offset to run a subset per cycle."""
     queries = []
     
     for loc in MONITORED_LOCATIONS:
@@ -46,4 +46,10 @@ def generate_queries():
                 "location_name": loc["name"]
             })
     
+    if limit:
+        n = len(queries)
+        start = offset % n
+        if start + limit <= n:
+            return queries[start : start + limit]
+        return queries[start:] + queries[: limit - (n - start)]
     return queries

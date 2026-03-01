@@ -9,6 +9,8 @@ import json
 from google import genai
 from dotenv import load_dotenv
 
+from utils.gemini_helper import generate_with_retry
+
 load_dotenv()
 
 _client = None
@@ -52,10 +54,7 @@ Be critical but fair. Local news from KMOX, KSDK, STL Today, FOX2, KMOV are cred
 Return ONLY valid JSON, no markdown fences, no explanation."""
 
         try:
-            response = get_client().models.generate_content(
-                model="gemini-2.0-flash",
-                contents=prompt
-            )
+            response = await generate_with_retry(get_client(), prompt)
             text = response.text.strip()
             if text.startswith("```"):
                 text = text.split("\n", 1)[1]
@@ -84,9 +83,38 @@ Return ONLY valid JSON, no markdown fences, no explanation."""
             }
     
     async def validate_batch(self, articles: list) -> list:
-        """Validate a batch of articles."""
-        results = []
-        for article in articles:
-            result = await self.validate(article)
-            results.append(result)
-        return results
+        """Validate all articles in ONE Gemini call."""
+        if not articles:
+            return []
+        if len(articles) == 1:
+            return [await self.validate(articles[0])]
+
+        items = [{"i": i, "title": a.get("title", "N/A"), "url": a.get("url", "N/A"), "publisher": a.get("publisher", "N/A"), "snippet": (a.get("snippet", "N/A") or "")[:500]} for i, a in enumerate(articles)]
+        prompt = f"""Validate these {len(articles)} news items for Saint Louis safety intelligence. Return a JSON array of {len(articles)} objects, same order by index i.
+Each object: "i": int, "cleaned_content": string, "summary": string, "plausibility": float 0-1, "severity_hint": float 0-1, "flags": list of strings, "evidence": list of strings.
+Input: {json.dumps(items, indent=2)}
+Return ONLY a valid JSON array."""
+
+        try:
+            response = await generate_with_retry(get_client(), prompt)
+            text = response.text.strip()
+            if text.startswith("```"):
+                text = text.split("\n", 1)[1].rsplit("```", 1)[0]
+            arr = json.loads(text)
+            by_i = {r["i"]: r for r in arr}
+            results = []
+            for i, article in enumerate(articles):
+                r = by_i.get(i, {})
+                results.append({
+                    "cleaned_content": r.get("cleaned_content", article.get("snippet", "")),
+                    "summary": r.get("summary", ""),
+                    "plausibility": float(r.get("plausibility", 0.5)),
+                    "severity_hint": float(r.get("severity_hint", 0.3)),
+                    "flags": r.get("flags", []),
+                    "evidence": r.get("evidence", []),
+                    "original": article,
+                })
+            return results
+        except Exception as e:
+            print(f"[VALIDATOR] Batch error: {e}")
+            return [await self.validate(a) for a in articles]

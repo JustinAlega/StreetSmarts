@@ -13,15 +13,47 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from db.database import init_db
+from db.db_writer import DBWriter
 from routes import heatmap, routing, social, location_summary
+
+ENABLE_LIVE_PIPELINE = os.getenv("ENABLE_LIVE_PIPELINE", "true").lower() in ("1", "true", "yes")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Initialize database on startup."""
     await init_db()
+
+    # Auto-seed when truth table is empty
+    db = DBWriter()
+    count = await db.count_truth_rows()
+    if count == 0:
+        print("[STARTUP] Truth table empty — running seed...")
+        from data_gen import generate_data
+        await generate_data()
+        print("[STARTUP] Seed complete.")
+    else:
+        print(f"[STARTUP] Truth table has {count} rows (skip seed)")
+
+    # Start live pipeline in background
+    pipeline_task = None
+    if ENABLE_LIVE_PIPELINE:
+        try:
+            from live_pipeline.pipeline import run_pipeline
+            pipeline_task = asyncio.create_task(run_pipeline())
+            print("[STARTUP] Live pipeline started (Bing News → Gemini → truth table)")
+        except Exception as e:
+            print(f"[STARTUP] Live pipeline failed to start: {e}")
+
     print("[SERVER] StreetSmarts backend ready for Saint Louis, MO")
     yield
+
+    if pipeline_task and not pipeline_task.done():
+        pipeline_task.cancel()
+        try:
+            await pipeline_task
+        except asyncio.CancelledError:
+            pass
 
 
 app = FastAPI(
