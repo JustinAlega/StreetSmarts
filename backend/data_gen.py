@@ -41,26 +41,28 @@ def generate_anchors():
     """Create random anchor points with strengths and category vectors."""
     anchors = []
     
-    # Regular anchors
+        # Regular anchors
     for _ in range(NUM_ANCHORS):
         lat = random.uniform(LAT_MIN, LAT_MAX)
         lng = random.uniform(LNG_MIN, LNG_MAX)
-        strength = random.uniform(0.05, 0.6)
+        strength = random.uniform(0.1, 0.8)
         cat_vector = {c: random.uniform(0, 1) for c in CATEGORIES}
-        total = sum(cat_vector.values())
-        cat_vector = {c: v / total for c, v in cat_vector.items()}
+        # Normalize to max=1.0 so spread hits genuine highs
+        max_v = max(cat_vector.values())
+        cat_vector = {c: v / max_v for c, v in cat_vector.items()}
         anchors.append((lat, lng, strength, cat_vector))
     
     # Super hotspots at known higher-risk areas
     for lat, lng, name in HOTSPOT_LOCATIONS:
         lat += random.uniform(-0.005, 0.005)
         lng += random.uniform(-0.005, 0.005)
-        strength = random.uniform(0.6, 0.95)
-        cat_vector = {c: random.uniform(0, 0.3) for c in CATEGORIES}
-        cat_vector["crime"] = random.uniform(0.5, 1.0)
-        cat_vector["public_safety"] = random.uniform(0.4, 0.9)
-        total = sum(cat_vector.values())
-        cat_vector = {c: v / total for c, v in cat_vector.items()}
+        strength = random.uniform(0.7, 1.0)
+        cat_vector = {c: random.uniform(0, 0.4) for c in CATEGORIES}
+        cat_vector["crime"] = random.uniform(0.7, 1.0)
+        cat_vector["public_safety"] = random.uniform(0.6, 1.0)
+        # Normalize to max=1.0 so hotspots truly map as 100% risk centers
+        max_v = max(cat_vector.values())
+        cat_vector = {c: v / max_v for c, v in cat_vector.items()}
         anchors.append((lat, lng, strength, cat_vector))
         print(f"  [HOTSPOT] {name} at ({lat:.4f}, {lng:.4f}) strength={strength:.2f}")
     

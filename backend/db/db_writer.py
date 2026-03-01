@@ -162,3 +162,46 @@ class DBWriter:
              math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) *
              math.sin(dlng / 2) ** 2)
         return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+    # ---- Safe Places cache ----
+
+    async def get_all_safe_places(self) -> list[dict]:
+        """Return all cached safe places from the database."""
+        async with self._connect() as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute(
+                "SELECT * FROM safe_places ORDER BY type, name"
+            )
+            rows = await cursor.fetchall()
+            return [dict(r) for r in rows]
+
+    async def is_safe_places_stale(self, max_age_days: int = 7) -> bool:
+        """Check if the safe_places data is older than max_age_days (default 7)."""
+        async with self._connect() as db:
+            cursor = await db.execute(
+                "SELECT MIN(fetched_at) as oldest FROM safe_places"
+            )
+            row = await cursor.fetchone()
+            if row is None or row[0] is None:
+                return True  # No data at all
+            from datetime import datetime, timedelta
+            try:
+                oldest = datetime.fromisoformat(row[0])
+            except (ValueError, TypeError):
+                return True
+            return (datetime.utcnow() - oldest) > timedelta(days=max_age_days)
+
+    async def refresh_safe_places(self, places: list[dict]):
+        """Clear old safe places and insert fresh data."""
+        async with self._connect() as db:
+            await db.execute("DELETE FROM safe_places")
+            for p in places:
+                hours_str = ", ".join(p.get("hours", [])) if isinstance(p.get("hours"), list) else str(p.get("hours", ""))
+                await db.execute(
+                    """INSERT INTO safe_places (name, address, lat, lng, type, hours)
+                       VALUES (?, ?, ?, ?, ?, ?)""",
+                    (p["name"], p.get("address", ""), p["lat"], p["lng"],
+                     p["type"], hours_str)
+                )
+            await db.commit()
+

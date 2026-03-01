@@ -233,7 +233,12 @@ async def process_crime_data():
 
             print(f"  [{crime['area']}] {crime['category']}: risk={risk:.2f}")
 
-    print("[STL_CRIME] Crime data processing complete.")
+    if fbi_data:
+        n_offenses = len(fbi_data)
+        total_annual = sum(sum(m.values()) for m in fbi_data.values())
+        print(f"[STL_CRIME] ✓ DONE — FBI API OK: {n_offenses} offense types, {total_annual} total (Gemini classified, truth+posts updated)")
+    else:
+        print("[STL_CRIME] ✓ DONE — FBI API unavailable: used sample data (Gemini still classified, truth+posts updated)")
 
 
 if __name__ == "__main__":

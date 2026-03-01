@@ -14,6 +14,7 @@ function MapPage() {
   const [location, setLocation] = useState(null);
   const [heatmapVisible, setHeatmapVisible] = useState(false);
   const [safeLocationsVisible, setSafeLocationsVisible] = useState(false);
+  const [safeLoading, setSafeLoading] = useState(false);
   const [mapRef, setMapRef] = useState(null);
 
   const handleLocationClick = (loc) => {
@@ -29,7 +30,7 @@ function MapPage() {
   };
 
   const handleToggleSafe = () => {
-    setSafeLocationsVisible(!safeLocationsVisible);
+    if (!safeLoading) setSafeLocationsVisible(!safeLocationsVisible);
   };
 
   const handleResetRoute = () => {
@@ -45,6 +46,7 @@ function MapPage() {
       <MapHeader
         heatmapActive={heatmapVisible}
         safeActive={safeLocationsVisible}
+        safeLoading={safeLoading}
         onToggleHeatmap={handleToggleHeatmap}
         onToggleSafe={handleToggleSafe}
         onResetRoute={handleResetRoute}
@@ -55,6 +57,7 @@ function MapPage() {
         route={route}
         heatmapVisible={heatmapVisible}
         safeLocationsVisible={safeLocationsVisible}
+        onSafeLoadingChange={setSafeLoading}
         onMapReady={setMapRef}
       />
 

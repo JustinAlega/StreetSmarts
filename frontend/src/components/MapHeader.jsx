@@ -1,4 +1,4 @@
-function MapHeader({ heatmapActive, safeActive, onToggleHeatmap, onToggleSafe, onResetRoute }) {
+function MapHeader({ heatmapActive, safeActive, safeLoading, onToggleHeatmap, onToggleSafe, onResetRoute }) {
     return (
         <div className="map-header glass">
             <div className="header-brand">
@@ -17,11 +17,21 @@ function MapHeader({ heatmapActive, safeActive, onToggleHeatmap, onToggleSafe, o
 
             <button
                 id="safe-toggle-btn"
-                className={`header-btn ${safeActive ? 'active' : ''}`}
+                className={`header-btn ${safeActive ? 'active' : ''} ${safeLoading ? 'loading' : ''}`}
                 onClick={onToggleSafe}
+                disabled={safeLoading}
             >
-                <span className="btn-icon">🛡️</span>
-                Nearby Safe
+                {safeLoading ? (
+                    <>
+                        <span className="btn-spinner"></span>
+                        Loading…
+                    </>
+                ) : (
+                    <>
+                        <span className="btn-icon">🛡️</span>
+                        Nearby Safe
+                    </>
+                )}
             </button>
 
             <button

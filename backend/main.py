@@ -14,9 +14,10 @@ load_dotenv()
 
 from db.database import init_db
 from db.db_writer import DBWriter
-from routes import heatmap, routing, social, location_summary
+from routes import heatmap, routing, social, location_summary, safe_places
 
 ENABLE_LIVE_PIPELINE = os.getenv("ENABLE_LIVE_PIPELINE", "true").lower() in ("1", "true", "yes")
+ENABLE_FBI_CRIME_ON_STARTUP = os.getenv("ENABLE_FBI_CRIME_ON_STARTUP", "true").lower() in ("1", "true", "yes")
 
 
 @asynccontextmanager
@@ -35,6 +36,16 @@ async def lifespan(app: FastAPI):
     else:
         print(f"[STARTUP] Truth table has {count} rows (skip seed)")
 
+    # FBI crime data (runs in background so server starts immediately; many Gemini calls)
+    fbi_task = None
+    if ENABLE_FBI_CRIME_ON_STARTUP:
+        try:
+            from static_analysis_pipeline.data_source_stl_crime import process_crime_data
+            fbi_task = asyncio.create_task(process_crime_data())
+            print("[STARTUP] FBI crime pipeline started (background)")
+        except Exception as e:
+            print(f"[STARTUP] FBI crime pipeline failed to start: {e}")
+
     # Start live pipeline in background
     pipeline_task = None
     if ENABLE_LIVE_PIPELINE:
@@ -48,6 +59,12 @@ async def lifespan(app: FastAPI):
     print("[SERVER] StreetSmarts backend ready for Saint Louis, MO")
     yield
 
+    if fbi_task and not fbi_task.done():
+        fbi_task.cancel()
+        try:
+            await fbi_task
+        except asyncio.CancelledError:
+            pass
     if pipeline_task and not pipeline_task.done():
         pipeline_task.cancel()
         try:
@@ -77,6 +94,7 @@ app.include_router(heatmap.router)
 app.include_router(routing.router)
 app.include_router(social.router)
 app.include_router(location_summary.router)
+app.include_router(safe_places.router)
 
 
 @app.get("/")
