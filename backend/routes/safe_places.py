@@ -222,6 +222,13 @@ async def _fetch_and_cache_places(lat: float, lng: float, radius_m: int = 25000)
         logger.error(f"Vultr Safe Places Error: {e}")
         raise
 
+def _ensure_places(places: list) -> list:
+    """If empty, use fallback so we never return zero places."""
+    if places:
+        return places
+    return [_format_place_for_response(p) for p in FALLBACK_PLACES]
+
+
 @router.get("/nearby-safe")
 async def get_nearby_safe(
     lat: float = Query(..., description="Latitude"),
@@ -236,18 +243,21 @@ async def get_nearby_safe(
         cached = await db.get_all_safe_places()
         if cached:
             places = [_format_place_for_response(p) for p in cached if _in_stl_bounds(float(p.get("lat", 0)), float(p.get("lng", 0)))]
+            places = _ensure_places(places)
             return {"places": sorted(places, key=lambda x: x['open_now'] is not True), "source": "cache"}
 
     # Refresh using Vultr
     try:
         raw_places = await _fetch_and_cache_places(lat, lng, radius_m=radius)
         places = [_format_place_for_response(p) for p in raw_places]
+        places = _ensure_places(places)
         return {"places": sorted(places, key=lambda x: x['open_now'] is not True), "source": "fresh"}
     except Exception as e:
         # Fallback to whatever we have
         cached = await db.get_all_safe_places()
         if cached:
             places = [_format_place_for_response(p) for p in cached if _in_stl_bounds(float(p.get("lat", 0)), float(p.get("lng", 0)))]
-            return {"places": sorted(places, key=lambda x: x['open_now'] is not True), "source": "stale_cache_error"}
-        places = [_format_place_for_response(p) for p in FALLBACK_PLACES]
-        return {"places": places, "source": "fallback"}
+        else:
+            places = []
+        places = _ensure_places(places)
+        return {"places": sorted(places, key=lambda x: x['open_now'] is not True), "source": "fallback" if not cached else "stale_cache_error"}
