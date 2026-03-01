@@ -1,8 +1,9 @@
 """
 Database schema and initialization for StreetSmarts.
-SQLite database with two core tables:
+SQLite database with three core tables:
   - posts: community reports and AI-generated incident posts
   - truth: per-location risk vectors with 8 category scores
+  - safe_places: cached nearby safe locations (refreshed weekly)
 """
 
 import aiosqlite
@@ -40,6 +41,19 @@ CREATE TABLE IF NOT EXISTS truth (
 CREATE INDEX IF NOT EXISTS idx_truth_coords ON truth(lat, lng);
 CREATE INDEX IF NOT EXISTS idx_posts_coords ON posts(lat, lng);
 CREATE INDEX IF NOT EXISTS idx_posts_created ON posts(created_at DESC);
+
+CREATE TABLE IF NOT EXISTS safe_places (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    address TEXT DEFAULT '',
+    lat REAL NOT NULL,
+    lng REAL NOT NULL,
+    type TEXT NOT NULL,
+    hours TEXT DEFAULT '',
+    fetched_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_safe_places_type ON safe_places(type);
 """
 
 

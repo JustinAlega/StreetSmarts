@@ -69,6 +69,7 @@ function MapView({ onLocationClick, route, heatmapVisible, safeLocationsVisible,
     const mapContainer = useRef(null);
     const mapRef = useRef(null);
     const markersRef = useRef([]);
+    const safePOIsCache = useRef({ pois: null });
     const [mapLoaded, setMapLoaded] = useState(false);
 
     // Initialize map
@@ -275,7 +276,60 @@ function MapView({ onLocationClick, route, heatmapVisible, safeLocationsVisible,
         map.fitBounds(bounds, { padding: 100, duration: 1000 });
     }, [route, mapLoaded]);
 
-    // Safe locations — use REAL Mapbox Places API data
+    // Render safe place markers on the map from POI data
+    const renderSafeMarkers = (pois) => {
+        for (const poi of pois) {
+            const el = document.createElement('div');
+            el.style.width = '32px';
+            el.style.height = '32px';
+            el.style.borderRadius = '50%';
+            el.style.background = poi.color;
+            el.style.display = 'flex';
+            el.style.alignItems = 'center';
+            el.style.justifyContent = 'center';
+            el.style.fontSize = '15px';
+            el.style.cursor = 'pointer';
+            el.style.border = poi.open_now === false
+                ? '2px solid rgba(255,255,255,0.15)'
+                : '2px solid rgba(255,255,255,0.5)';
+            el.style.boxShadow = poi.open_now === false
+                ? `0 0 8px ${poi.color}30`
+                : `0 0 14px ${poi.color}60`;
+            el.style.opacity = poi.open_now === false ? '0.55' : '1';
+            el.textContent = poi.icon;
+
+            const statusBadge = poi.open_now === true
+                ? '<span class="safe-popup-badge open">Open Now</span>'
+                : poi.open_now === false
+                    ? '<span class="safe-popup-badge closed">Closed</span>'
+                    : '<span class="safe-popup-badge unknown">Hours N/A</span>';
+
+            const hoursHtml = poi.hours && poi.hours.length
+                ? `<div class="safe-popup-hours">${poi.hours.join('<br>')}</div>`
+                : '';
+
+            const popup = new mapboxgl.Popup({ offset: 20, closeButton: true, maxWidth: '260px' })
+                .setHTML(`
+                    <div class="safe-popup-name">${poi.name}</div>
+                    <div class="safe-popup-meta">
+                        <span class="safe-popup-type">${poi.label}</span>
+                        ${statusBadge}
+                    </div>
+                    <div class="safe-popup-addr">${poi.address}</div>
+                    ${hoursHtml}
+                `);
+
+            const marker = new mapboxgl.Marker({ element: el })
+                .setLngLat([poi.lng, poi.lat])
+                .setPopup(popup)
+                .addTo(mapRef.current);
+
+            marker._safeMarker = true;
+            markersRef.current.push(marker);
+        }
+    };
+
+    // Safe locations — served from backend DB cache (refreshed weekly)
     useEffect(() => {
         // Clear existing safe markers
         markersRef.current
@@ -288,61 +342,22 @@ function MapView({ onLocationClick, route, heatmapVisible, safeLocationsVisible,
             return;
         }
 
+        // Use session cache if available (avoid re-fetching on toggle)
+        if (safePOIsCache.current.pois) {
+            renderSafeMarkers(safePOIsCache.current.pois);
+            if (onSafeLoadingChange) onSafeLoadingChange(false);
+            return;
+        }
+
         const center = mapRef.current.getCenter();
 
         // Signal loading start
         if (onSafeLoadingChange) onSafeLoadingChange(true);
 
         fetchSafePOIs(center.lng, center.lat).then(pois => {
-            for (const poi of pois) {
-                const el = document.createElement('div');
-                el.style.width = '32px';
-                el.style.height = '32px';
-                el.style.borderRadius = '50%';
-                el.style.background = poi.color;
-                el.style.display = 'flex';
-                el.style.alignItems = 'center';
-                el.style.justifyContent = 'center';
-                el.style.fontSize = '15px';
-                el.style.cursor = 'pointer';
-                el.style.border = poi.open_now === false
-                    ? '2px solid rgba(255,255,255,0.15)'
-                    : '2px solid rgba(255,255,255,0.5)';
-                el.style.boxShadow = poi.open_now === false
-                    ? `0 0 8px ${poi.color}30`
-                    : `0 0 14px ${poi.color}60`;
-                el.style.opacity = poi.open_now === false ? '0.55' : '1';
-                el.textContent = poi.icon;
-
-                const statusBadge = poi.open_now === true
-                    ? '<span class="safe-popup-badge open">Open Now</span>'
-                    : poi.open_now === false
-                        ? '<span class="safe-popup-badge closed">Closed</span>'
-                        : '<span class="safe-popup-badge unknown">Hours N/A</span>';
-
-                const hoursHtml = poi.hours && poi.hours.length
-                    ? `<div class="safe-popup-hours">${poi.hours.join('<br>')}</div>`
-                    : '';
-
-                const popup = new mapboxgl.Popup({ offset: 20, closeButton: true, maxWidth: '260px' })
-                    .setHTML(`
-                        <div class="safe-popup-name">${poi.name}</div>
-                        <div class="safe-popup-meta">
-                            <span class="safe-popup-type">${poi.label}</span>
-                            ${statusBadge}
-                        </div>
-                        <div class="safe-popup-addr">${poi.address}</div>
-                        ${hoursHtml}
-                    `);
-
-                const marker = new mapboxgl.Marker({ element: el })
-                    .setLngLat([poi.lng, poi.lat])
-                    .setPopup(popup)
-                    .addTo(mapRef.current);
-
-                marker._safeMarker = true;
-                markersRef.current.push(marker);
-            }
+            // Store in session cache
+            safePOIsCache.current = { pois };
+            renderSafeMarkers(pois);
         }).finally(() => {
             // Signal loading complete
             if (onSafeLoadingChange) onSafeLoadingChange(false);
