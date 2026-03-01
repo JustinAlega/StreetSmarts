@@ -48,7 +48,7 @@ async function reverseGeocode(lat, lng) {
 async function fetchSafePOIs(centerLng, centerLat) {
     try {
         const res = await fetch(
-            `${API_URL}/nearby-safe?lat=${centerLat}&lng=${centerLng}&radius=3000`
+            `${API_URL}/nearby-safe?lat=${centerLat}&lng=${centerLng}&radius=25000`
         );
         const data = await res.json();
         if (data.error) {
