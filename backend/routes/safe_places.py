@@ -58,7 +58,7 @@ async def _fetch_and_cache_places(lat: float, lng: float) -> list[dict]:
     now_str = now_stl.strftime("%A, %B %d, %Y at %I:%M %p CT")
     prompt = _build_prompt(lat, lng, now_str)
     
-    model_name = os.getenv("VULTR_MODEL", "meta-llama-3-1-8b-instruct")
+    model_name = os.getenv("VULTR_MODEL", "deepseek-r1-distill-qwen-32b")
 
     logger.info(f"Refreshing safe places via Vultr ({model_name})")
     

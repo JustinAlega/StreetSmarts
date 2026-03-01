@@ -15,7 +15,7 @@ _vultr_client = AsyncOpenAI(
 class VultrScraper:
     """Uses local Playwright + Vultr AI (No Browserbase needed)."""
     
-    def __init__(self, model_name="meta-llama-3-1-8b-instruct"):
+    def __init__(self, model_name="deepseek-r1-distill-qwen-32b"):
         self.model = model_name
         self.config = {
             "max_items_per_query": 3,
