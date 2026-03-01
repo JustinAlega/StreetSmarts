@@ -13,26 +13,27 @@ Ties all agents together in an async loop:
 """
 
 import asyncio
-from .scraper_agent import ScraperAgent
+import json
+from .scraper_agent import VultrScraper
 from .validator_agent import ValidatorAgent
 from .criticality_agent import CriticalityAgent
 from .observer_agent import ObserverAgent
 from .query_planner import generate_queries
 from db.db_writer import DBWriter
 
-CYCLE_DELAY_SECONDS = 40
+CYCLE_DELAY_SECONDS = 20
 
 
 async def run_pipeline():
     """Main pipeline loop."""
-    scraper = ScraperAgent()
+    scraper = VultrScraper()
     validator = ValidatorAgent()
     criticality = CriticalityAgent()
     observer = ObserverAgent()
     db = DBWriter()
     
-    # Configure scraper
-    observer.tune_scraper(scraper)
+    # Configure scraper for high density
+    scraper.tune(max_items_per_query=12)
     
     print("[PIPELINE] Starting StreetSmarts live pipeline for Saint Louis...")
     
@@ -56,8 +57,17 @@ async def run_pipeline():
             
             print(f"[PIPELINE] Scraping: {query}")
             
-            # 1. Scrape
-            articles = await scraper.scrape_news(query)
+            # 1. Scrape (Local Playwright + Vultr AI Extraction)
+            raw_analysis = await scraper.scrape_and_analyze(query)
+            
+            try:
+                # Vultr returns a JSON string, we need to parse it
+                data = json.loads(raw_analysis)
+                articles = data.get("articles", [])
+            except Exception as e:
+                print(f"[PIPELINE] JSON Parse Error: {e}")
+                continue
+                
             if not articles:
                 continue
             

@@ -25,7 +25,7 @@ class DBWriter:
 
     def __init__(self):
         self.db_path = DB_PATH
-        self.alpha = 0.25  # EMA smoothing factor
+        self.alpha = 0.7  # EMA smoothing factor (High value = more reactive to real-time)
 
     def _connect(self):
         """Get an async context manager for a database connection."""

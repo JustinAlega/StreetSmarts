@@ -9,7 +9,7 @@ import numpy as np
 from PIL import Image
 from fastapi import APIRouter
 from fastapi.responses import Response
-from db.db_writer import DBWriter, CATEGORIES
+from db.db_writer import DBWriter, CATEGORIES, CATEGORY_WEIGHTS
 
 router = APIRouter()
 db = DBWriter()
@@ -72,7 +72,10 @@ async def get_tile(z: int, x: int, y: int):
     denominator = np.zeros((TILE_SIZE, TILE_SIZE), dtype=np.float64)
     
     for pt in points:
-        risk = max(pt.get(c, 0.0) for c in CATEGORIES)
+        # Weighted risk calculation to match routing and location summary
+        weighted_vals = [pt.get(c, 0.0) * CATEGORY_WEIGHTS.get(c, 0.3) for c in CATEGORIES]
+        risk = max(weighted_vals) if weighted_vals else 0.0
+        
         if risk < 0.01:
             continue
             

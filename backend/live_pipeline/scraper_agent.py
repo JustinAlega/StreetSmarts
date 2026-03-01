@@ -17,6 +17,14 @@ class VultrScraper:
     
     def __init__(self, model_name="meta-llama-3-1-8b-instruct"):
         self.model = model_name
+        self.config = {
+            "max_items_per_query": 3,
+            "dom_settle_seconds": 6,
+        }
+
+    def tune(self, **kwargs):
+        """Update scraper configuration."""
+        self.config.update(kwargs)
 
     async def scrape_and_analyze(self, query: str):
         search_url = f"https://www.bing.com/news/search?q={query.replace(' ', '+')}"
@@ -46,7 +54,7 @@ class VultrScraper:
                 model=self.model,
                 messages=[
                     {"role": "system", "content": "You are a data extractor. Extract St. Louis safety news into JSON."},
-                    {"role": "user", "content": f"Find all news articles in this HTML and return a JSON list of: title, url, and snippet. HTML: {raw_html[:8000]}"}
+                    {"role": "user", "content": f"Find up to {self.config['max_items_per_query']} news articles in this HTML and return a JSON list of: title, url, and snippet. HTML: {raw_html[:8000]}"}
                 ],
                 response_format={"type": "json_object"}
             )

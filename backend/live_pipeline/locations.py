@@ -40,4 +40,28 @@ MONITORED_LOCATIONS = [
         "lng": -90.2854,
         "description": "Major urban park, Zoo, Art Museum, Science Center"
     },
+    {
+        "name": "Florissant",
+        "lat": 38.7892,
+        "lng": -90.3226,
+        "description": "Large St. Louis County suburb"
+    },
+    {
+        "name": "Ferguson",
+        "lat": 38.7442,
+        "lng": -90.3054,
+        "description": "St. Louis County neighborhood"
+    },
+    {
+        "name": "Clayton",
+        "lat": 38.6426,
+        "lng": -90.3237,
+        "description": "County seat of St. Louis County"
+    },
+    {
+        "name": "Kirkwood",
+        "lat": 38.5834,
+        "lng": -90.4068,
+        "description": "St. Louis County suburb"
+    },
 ]
