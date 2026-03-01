@@ -6,7 +6,7 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
 // STL proximity bias for geocoding
 const STL_PROXIMITY = '-90.1994,38.6270';
 
-function RoutePanel({ onRouteComputed }) {
+function RoutePanel({ onRouteComputed, onResetRoute }) {
     const [startText, setStartText] = useState('');
     const [endText, setEndText] = useState('');
     const [startCoords, setStartCoords] = useState(null);
@@ -21,6 +21,18 @@ function RoutePanel({ onRouteComputed }) {
     const [showEndDropdown, setShowEndDropdown] = useState(false);
     const startTimeout = useRef(null);
     const endTimeout = useRef(null);
+
+    const handleClearRoute = () => {
+        setStartText('');
+        setEndText('');
+        setStartCoords(null);
+        setEndCoords(null);
+        setRouteResult(null);
+        setError(null);
+        setStartSuggestions([]);
+        setEndSuggestions([]);
+        onResetRoute();
+    };
 
     const geocode = async (query) => {
         if (!query || query.length < 3) return [];
@@ -112,14 +124,40 @@ function RoutePanel({ onRouteComputed }) {
 
     return (
         <div className="route-panel glass">
-            <h2>
-                <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <svg viewBox="0 0 24 24" fill="none" width="20" height="20" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M12 12H12.01M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12ZM16 8L9.5 9.5L8 16L14.5 14.5L16 8Z" stroke="var(--accent-primary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                    Route Planner
-                </span>
-            </h2>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <h2 style={{ margin: 0 }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <svg viewBox="0 0 24 24" fill="none" width="20" height="20" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M12 12H12.01M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12ZM16 8L9.5 9.5L8 16L14.5 14.5L16 8Z" stroke="var(--accent-primary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                        Route Planner
+                    </span>
+                </h2>
+                {routeResult && (
+                    <button
+                        onClick={handleClearRoute}
+                        style={{
+                            background: 'rgba(255,255,255,0.1)',
+                            border: 'none',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            padding: '4px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: 'var(--text-secondary, #aaa)',
+                            transition: 'color 0.2s, background 0.2s',
+                        }}
+                        title="Clear route"
+                        onMouseEnter={e => { e.currentTarget.style.color = '#fff'; e.currentTarget.style.background = 'rgba(239,68,68,0.5)'; }}
+                        onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-secondary, #aaa)'; e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; }}
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" width="18" height="18">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                )}
+            </div>
 
             <div className="route-input-group">
                 <div className="route-input-wrapper">

@@ -49,7 +49,6 @@ function MapPage() {
         safeLoading={safeLoading}
         onToggleHeatmap={handleToggleHeatmap}
         onToggleSafe={handleToggleSafe}
-        onResetRoute={handleResetRoute}
       />
 
       <MapView
@@ -61,7 +60,7 @@ function MapPage() {
         onMapReady={setMapRef}
       />
 
-      <RoutePanel onRouteComputed={handleRouteComputed} />
+      <RoutePanel onRouteComputed={handleRouteComputed} onResetRoute={handleResetRoute} />
 
       {location && (
         <SummaryPanel
