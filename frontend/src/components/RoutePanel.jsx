@@ -222,7 +222,10 @@ function RoutePanel({ onRouteComputed }) {
             {routeResult && (
                 <div className="route-result">
                     <div className="route-result-row">
-                        <span>📏 Distance</span>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <svg viewBox="0 0 24 24" fill="none" width="16" height="16" xmlns="http://www.w3.org/2000/svg"><path d="M5 17H19C21 17 22 16 22 14V10C22 8 21 7 19 7H5C3 7 2 8 2 10V14C2 16 3 17 5 17Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /><path d="M18 7V12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /><path d="M6 7V11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /><path d="M10.05 7L10 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /><path d="M14 7V10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
+                            Distance
+                        </span>
                         <span>{routeResult.distance_m >= 1000
                             ? `${(routeResult.distance_m / 1000).toFixed(1)} km`
                             : `${Math.round(routeResult.distance_m)} m`
@@ -230,13 +233,19 @@ function RoutePanel({ onRouteComputed }) {
                     </div>
                     {routeResult.duration_min && (
                         <div className="route-result-row">
-                            <span>🕐 Walking time</span>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <svg viewBox="0 0 24 24" fill="none" width="16" height="16" xmlns="http://www.w3.org/2000/svg"><path d="M12 7V12L13.5 14.5M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                                Walking time
+                            </span>
                             <span>{Math.round(routeResult.duration_min)} min</span>
                         </div>
                     )}
                     {routeResult.risk_score != null && (
                         <div className="route-result-row">
-                            <span>🛡️ Route risk</span>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <svg viewBox="0 0 24 24" fill="none" width="16" height="16" xmlns="http://www.w3.org/2000/svg"><path d="M9 12L11 14L15 9.99999M20 12C20 16.4611 14.54 19.6937 12.6414 20.683C12.4361 20.79 12.3334 20.8435 12.191 20.8712C12.08 20.8928 11.92 20.8928 11.809 20.8712C11.6666 20.8435 11.5639 20.79 11.3586 20.683C9.45996 19.6937 4 16.4611 4 12V8.21759C4 7.41808 4 7.01833 4.13076 6.6747C4.24627 6.37113 4.43398 6.10027 4.67766 5.88552C4.9535 5.64243 5.3278 5.50207 6.0764 5.22134L11.4382 3.21067C11.6461 3.13271 11.75 3.09373 11.857 3.07827C11.9518 3.06457 12.0482 3.06457 12.143 3.07827C12.25 3.09373 12.3539 3.13271 12.5618 3.21067L17.9236 5.22134C18.6722 5.50207 19.0465 5.64243 19.3223 5.88552C19.566 6.10027 19.7537 6.37113 19.8692 6.6747C20 7.01833 20 7.41808 20 8.21759V12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                                Route risk
+                            </span>
                             <span style={{
                                 color: routeResult.risk_score >= 60 ? 'var(--danger)' :
                                     routeResult.risk_score >= 30 ? 'var(--moderate)' : 'var(--safe)'

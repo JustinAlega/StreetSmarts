@@ -268,8 +268,8 @@ function MapView({ onLocationClick, route, heatmapVisible, safeLocationsVisible,
             return m;
         };
 
-        markersRef.current.push(createRouteMarker(startCoord, 'A', '#10b981'));
-        markersRef.current.push(createRouteMarker(endCoord, 'B', '#ef4444'));
+        markersRef.current.push(createRouteMarker(startCoord, 'A', '#000000'));
+        markersRef.current.push(createRouteMarker(endCoord, 'B', '#000000'));
 
         // Fit bounds to route
         const bounds = new mapboxgl.LngLatBounds();

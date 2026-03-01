@@ -176,6 +176,8 @@ body {
 
 .header-brand .brand-icon {
   font-size: 18px;
+  display: inline-flex;
+  align-items: center;
 }
 
 .header-btn {
@@ -210,6 +212,8 @@ body {
 
 .header-btn .btn-icon {
   font-size: 14px;
+  display: inline-flex;
+  align-items: center;
 }
 
 .header-btn.loading,
@@ -392,6 +396,10 @@ body {
   cursor: pointer;
   transition: all var(--transition-fast);
   text-align: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
 }
 
 .priority-btn:hover {
@@ -717,7 +725,7 @@ body {
 .map-legend {
   position: absolute;
   bottom: 32px;
-  right: 16px;
+  left: 16px;
   z-index: 10;
   padding: 14px 18px;
   border-radius: var(--radius-md);
