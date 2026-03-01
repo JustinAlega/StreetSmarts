@@ -145,7 +145,10 @@ function RoutePanel({ onRouteComputed }) {
                 </div>
 
                 <div className="route-input-wrapper">
-                    <div className="route-input-dot end"></div>
+                    <svg className="route-input-icon end" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" width="16" height="16">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z" />
+                    </svg>
                     <input
                         id="route-end-input"
                         className="route-input"
@@ -178,14 +181,20 @@ function RoutePanel({ onRouteComputed }) {
                     className={`priority-btn ${priority === 'safety' ? 'active' : ''}`}
                     onClick={() => setPriority('safety')}
                 >
-                    🛡️ Safety First
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="14" height="14" style={{ marginRight: '4px' }}>
+                        <path fillRule="evenodd" d="M12 1.5a5.25 5.25 0 0 0-5.25 5.25v3a3 3 0 0 0-3 3v6.75a3 3 0 0 0 3 3h10.5a3 3 0 0 0 3-3v-6.75a3 3 0 0 0-3-3v-3c0-2.9-2.35-5.25-5.25-5.25Zm3.75 8.25v-3a3.75 3.75 0 1 0-7.5 0v3h7.5Z" clipRule="evenodd" />
+                    </svg>
+                    Safety First
                 </button>
                 <button
                     id="priority-speed-btn"
                     className={`priority-btn ${priority === 'speed' ? 'active' : ''}`}
                     onClick={() => setPriority('speed')}
                 >
-                    ⚡ Fastest
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="14" height="14" style={{ marginRight: '4px' }}>
+                        <path fillRule="evenodd" d="M14.615 1.595a.75.75 0 0 1 .359.852L12.982 9.75h7.268a.75.75 0 0 1 .548 1.262l-10.5 11.25a.75.75 0 0 1-1.272-.71l1.992-7.302H3.75a.75.75 0 0 1-.548-1.262l10.5-11.25a.75.75 0 0 1 .913-.143Z" clipRule="evenodd" />
+                    </svg>
+                    Fastest
                 </button>
             </div>
 

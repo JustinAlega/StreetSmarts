@@ -1,38 +1,38 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap');
 
 :root {
-  /* Core palette - dark mode inspired by city at night */
-  --bg-primary: #0a0e1a;
-  --bg-secondary: #111827;
-  --bg-card: rgba(17, 24, 39, 0.85);
-  --bg-glass: rgba(17, 24, 39, 0.65);
-  --bg-elevated: #1f2937;
+  /* Core palette - light theme */
+  --bg-primary: #f5f7fb;
+  --bg-secondary: #ffffff;
+  --bg-card: rgba(255, 255, 255, 0.92);
+  --bg-glass: rgba(255, 255, 255, 0.75);
+  --bg-elevated: #edf0f7;
 
-  /* Accent colors - inspired by STL Gateway Arch at sunset */
-  --accent-primary: #6366f1;
-  --accent-secondary: #8b5cf6;
-  --accent-gradient: linear-gradient(135deg, #6366f1, #8b5cf6, #a78bfa);
-  --accent-glow: rgba(99, 102, 241, 0.3);
+  /* Accent colors - #007BFC blue */
+  --accent-primary: #007BFC;
+  --accent-secondary: #0066d4;
+  --accent-gradient: linear-gradient(135deg, #007BFC, #0066d4, #3d9bff);
+  --accent-glow: rgba(0, 123, 252, 0.25);
 
   /* Status colors */
   --safe: #10b981;
-  --safe-bg: rgba(16, 185, 129, 0.15);
-  --moderate: #f59e0b;
-  --moderate-bg: rgba(245, 158, 11, 0.15);
+  --safe-bg: rgba(16, 185, 129, 0.12);
+  --moderate: #e69500;
+  --moderate-bg: rgba(245, 158, 11, 0.12);
   --danger: #ef4444;
-  --danger-bg: rgba(239, 68, 68, 0.15);
+  --danger-bg: rgba(239, 68, 68, 0.1);
   --critical: #dc2626;
 
   /* Text */
-  --text-primary: #f9fafb;
-  --text-secondary: #9ca3af;
-  --text-muted: #6b7280;
-  --text-accent: #a78bfa;
+  --text-primary: #1a2332;
+  --text-secondary: #4b5563;
+  --text-muted: #9ca3af;
+  --text-accent: #007BFC;
 
   /* Borders */
-  --border-subtle: rgba(255, 255, 255, 0.06);
-  --border-light: rgba(255, 255, 255, 0.1);
-  --border-accent: rgba(99, 102, 241, 0.3);
+  --border-subtle: rgba(0, 0, 0, 0.06);
+  --border-light: rgba(0, 0, 0, 0.1);
+  --border-accent: rgba(0, 123, 252, 0.3);
 
   /* Spacing */
   --radius-sm: 8px;
@@ -42,9 +42,9 @@
   --radius-full: 9999px;
 
   /* Shadows */
-  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
-  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.5);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.12);
   --shadow-glow: 0 0 24px var(--accent-glow);
 
   /* Transitions */
@@ -130,7 +130,7 @@ body {
 }
 
 .mapboxgl-ctrl-group button span {
-  filter: invert(1);
+  /* light theme: no invert needed */
 }
 
 /* ============================================
@@ -170,16 +170,12 @@ body {
   font-weight: 700;
   font-size: 15px;
   letter-spacing: -0.02em;
-  background: var(--accent-gradient);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: var(--accent-primary);
   white-space: nowrap;
 }
 
 .header-brand .brand-icon {
   font-size: 18px;
-  -webkit-text-fill-color: initial;
 }
 
 .header-btn {
@@ -308,13 +304,18 @@ body {
 }
 
 .route-input-dot.start {
-  background: var(--safe);
-  box-shadow: 0 0 8px rgba(16, 185, 129, 0.4);
+  background: transparent;
+  border: 2px solid var(--accent-primary);
+  box-shadow: none;
 }
 
-.route-input-dot.end {
-  background: var(--danger);
-  box-shadow: 0 0 8px rgba(239, 68, 68, 0.4);
+.route-input-icon.end {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #ef4444;
+  flex-shrink: 0;
 }
 
 .route-input {
