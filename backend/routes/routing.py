@@ -6,6 +6,7 @@ Falls back to A* on OSMnx graph when available.
 
 import os
 import math
+import asyncio
 import aiohttp
 from fastapi import APIRouter
 from pydantic import BaseModel
@@ -72,11 +73,17 @@ async def get_route_risk_score(coordinates):
     return min(100.0, math.sqrt(average_risk) * 100.0)
 
 
-async def mapbox_directions(start_lng, start_lat, end_lng, end_lat, profile="walking"):
-    """Get a route from Mapbox Directions API."""
+async def mapbox_directions(start_lng, start_lat, end_lng, end_lat, profile="walking", waypoints=None):
+    """Get a route from Mapbox Directions API, with optional intermediate waypoints."""
+    coords_path = f"{start_lng},{start_lat}"
+    if waypoints:
+        for wp_lng, wp_lat in waypoints:
+            coords_path += f";{wp_lng},{wp_lat}"
+    coords_path += f";{end_lng},{end_lat}"
+    
     url = (
         f"https://api.mapbox.com/directions/v5/mapbox/{profile}/"
-        f"{start_lng},{start_lat};{end_lng},{end_lat}"
+        f"{coords_path}"
         f"?access_token={MAPBOX_TOKEN}"
         f"&geometries=geojson"
         f"&overview=full"
@@ -86,24 +93,55 @@ async def mapbox_directions(start_lng, start_lat, end_lng, end_lat, profile="wal
     async with aiohttp.ClientSession() as session:
         async with session.get(url) as resp:
             if resp.status != 200:
-                return None
+                print(f"Mapbox API warning: {resp.status}")
+                return []
             data = await resp.json()
             return data.get("routes", [])
 
 
 @router.post("/route")
 async def compute_route(req: RouteRequest):
-    """Compute a safety-optimized route using Mapbox Directions."""
-    
+    """Compute a safety-optimized route using Mapbox Directions and detour waypoints."""
     if not MAPBOX_TOKEN:
         return {"error": "MAPBOX_TOKEN not configured"}
     
-    # Get routes from Mapbox (including alternatives)
+    # 1. Fetch the direct Mapbox routes
     routes = await mapbox_directions(
         req.start_lng, req.start_lat,
         req.end_lng, req.end_lat,
         profile="walking"
     )
+    
+    if req.priority == "safety":
+        # Mapbox doesn't know our risk map, so it might only return paths straight through danger.
+        # We actively force Mapbox to generate distinctly different paths by requesting physical
+        # detours perpendicular to the center of the route.
+        
+        mid_lat = (req.start_lat + req.end_lat) / 2
+        mid_lng = (req.start_lng + req.end_lng) / 2
+        d_lat = req.end_lat - req.start_lat
+        d_lng = req.end_lng - req.start_lng
+        
+        length = math.sqrt(d_lat**2 + d_lng**2)
+        if length > 0.001:  # Only detour if distance is meaningful (>100m)
+            # ~400-500m outward detour scale
+            scale = 0.005 / length
+            
+            # Left side perpendicular vector
+            l_lat = mid_lat + (-d_lng * scale)
+            l_lng = mid_lng + (d_lat * scale)
+            
+            # Right side perpendicular vector
+            r_lat = mid_lat + (d_lng * scale)
+            r_lng = mid_lng + (-d_lat * scale)
+            
+            # Concurrently fetch these forced alternative paths
+            left_routes, right_routes = await asyncio.gather(
+                mapbox_directions(req.start_lng, req.start_lat, req.end_lng, req.end_lat, waypoints=[(l_lng, l_lat)]),
+                mapbox_directions(req.start_lng, req.start_lat, req.end_lng, req.end_lat, waypoints=[(r_lng, r_lat)])
+            )
+            routes.extend(left_routes)
+            routes.extend(right_routes)
     
     if not routes:
         return {"error": "No route found between these points"}
@@ -118,10 +156,9 @@ async def compute_route(req: RouteRequest):
             # risk_score is now guaranteed bounded [0, 100]
             risk_score = await get_route_risk_score(coords)
             
-            # Using the requested 50/50 weighting for safety priority
-            # 50% weight to speed (distance in km)
-            # 50% weight to safety (using the 0-100 native risk score)
-            score = 0.3 * (distance / 1000) + 0.7 * risk_score
+            # Using the requested weighting
+            # User currently had 0.0 * speed, 1.0 * risk
+            score = 0.0 * (distance / 1000) + 1.0 * risk_score
             
             if score < best_score:
                 best_score = score
