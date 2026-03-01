@@ -1,121 +1,75 @@
-"""
-Criticality Agent for StreetSmarts.
-Uses Gemini for final classification: severity, category, and tweet generation.
-Replaces Anthropic Claude from the original system.
-"""
-
 import os
 import json
-from google import genai
-from google.genai import types
+import asyncio
+from openai import AsyncOpenAI # Use OpenAI client for Vultr's vLLM
 from dotenv import load_dotenv
 
 load_dotenv()
 
-_client = None
-
-def get_client():
-    global _client
-    if _client is None:
-        _client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
-    return _client
-
+# Initialize the Vultr-hosted client
+# VULTR_BASE_URL should be something like http://your-vultr-ip:8000/v1
+_client = AsyncOpenAI(
+    api_key=os.getenv("VULTR_API_KEY"),
+    base_url=os.getenv("VULTR_BASE_URL") 
+)
 
 class CriticalityAgent:
-    """Final AI classification layer using Gemini."""
+    """Final AI classification layer using Vultr-hosted Llama 3."""
     
+    def __init__(self, model_name="meta-llama-3-1-8b-instruct"):
+        self.model = model_name
+
     async def assess(self, validated_item: dict) -> dict:
-        """Assess validated content for final severity, category, and tweet.
-        
-        Returns:
-            dict with: final_severity (0-1), category, tweet (≤280 chars)
-        """
         plausibility = validated_item.get("plausibility", 0.5)
         
         prompt = f"""You are a criticality assessment agent for Saint Louis, MO safety intelligence.
-
-Analyze this validated report and provide a final assessment.
+Analyze this report and return ONLY valid JSON.
 
 Content: {validated_item.get('cleaned_content', '')}
 Summary: {validated_item.get('summary', '')}
 Plausibility: {plausibility}
-Flags: {validated_item.get('flags', [])}
 
-Return a JSON object with:
-- "final_severity": float 0.0-1.0, your final assessment of how severe this is
-  (consider both the event severity and plausibility)
-- "category": one of ["crime", "public_safety", "transport", "infrastructure", "policy", "protest", "weather", "other"]
-- "tweet": a ≤280-character neutral, factual summary suitable for a public safety feed
-
-Tweet rules:
-- If plausibility < 0.5, start with "Unverified reports:"
-- No emojis
-- Maximum 1 hashtag (use #STL or neighborhood-specific)
-- No speculation, stick to facts
-- Be concise and informative
-
-Return ONLY valid JSON, no markdown, no explanation."""
+Return JSON with:
+- "final_severity": float 0.0-1.0
+- "category": ["crime", "public_safety", "transport", "infrastructure", "protest", "other"]
+- "tweet": factual summary ≤280 chars. (Rule: if plausibility < 0.5, start with "Unverified reports:")"""
 
         try:
-            response = get_client().models.generate_content(
-                model="gemini-2.5-flash",
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    temperature=0.2,
-                )
+            # Vultr/vLLM call
+            response = await _client.chat.completions.create(
+                model=self.model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.2,
+                response_format={"type": "json_object"} # Supported by vLLM/Llama 3
             )
-            text = response.text.strip()
-            if text.startswith("```"):
-                text = text.split("\n", 1)[1]
-                text = text.rsplit("```", 1)[0]
             
-            result = json.loads(text)
-            
-            tweet = result.get("tweet", "")[:280]
+            result = json.loads(response.choices[0].message.content)
             
             return {
                 "final_severity": float(result.get("final_severity", 0.3)),
                 "category": result.get("category", "other"),
-                "tweet": tweet
+                "tweet": result.get("tweet", "")[:280]
             }
         except Exception as e:
-            print(f"[CRITICALITY] Error: {e}")
-            return {
-                "final_severity": 0.3,
-                "category": "other",
-                "tweet": f"Safety update for St. Louis area. #STL"
-            }
-    
+            print(f"[VULTR-CRITICALITY] Error: {e}")
+            return {"final_severity": 0.3, "category": "other", "tweet": "Safety update for #STL"}
+
     async def classify_post(self, content: str) -> dict:
-        """Simplified classification for human community posts."""
-        prompt = f"""Classify this safety report for Saint Louis, MO.
-
-Report: "{content}"
-
-Return JSON with:
-- "final_severity": float 0.0-1.0
-- "category": one of ["crime", "public_safety", "transport", "infrastructure", "policy", "protest", "weather", "other"]
-
-Return ONLY valid JSON."""
-
+        """Simplified classification for community posts."""
+        prompt = f"Classify this STL safety report into JSON: {content}"
+        
         try:
-            response = get_client().models.generate_content(
-                model="gemini-2.5-flash",
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    temperature=0.2,
-                )
+            response = await _client.chat.completions.create(
+                model=self.model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.1,
+                response_format={"type": "json_object"}
             )
-            text = response.text.strip()
-            if text.startswith("```"):
-                text = text.split("\n", 1)[1]
-                text = text.rsplit("```", 1)[0]
-            
-            result = json.loads(text)
+            result = json.loads(response.choices[0].message.content)
             return {
                 "final_severity": float(result.get("final_severity", 0.3)),
                 "category": result.get("category", "other")
             }
         except Exception as e:
-            print(f"[CRITICALITY] Post classification error: {e}")
+            print(f"[VULTR-CRITICALITY] Post error: {e}")
             return {"final_severity": 0.3, "category": "other"}

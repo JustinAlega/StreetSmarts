@@ -5,7 +5,7 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
 
 const CATEGORIES = [
     'crime', 'public_safety', 'transport', 'infrastructure',
-    'policy', 'protest', 'weather', 'other'
+    'protest', 'other'
 ];
 
 function getCategoryColor(value) {

@@ -4,7 +4,7 @@ Generates structured safety reports for any lat/lng coordinate.
 """
 
 from fastapi import APIRouter
-from db.db_writer import DBWriter, CATEGORIES
+from db.db_writer import DBWriter, CATEGORIES, CATEGORY_WEIGHTS
 
 router = APIRouter()
 db = DBWriter()
@@ -69,11 +69,9 @@ async def get_location_summary(lat: float, lng: float, radius_km: float = 1.0):
                 blended = truth_vec.get(c, 0.0)
             cat_averages[c] = round(blended, 3)
     
-    # --- Improved risk scoring ---
-    # The heatmap and routing rely on the MAXIMUM risk category.
-    # Align the location summary strictly with this metric so colors match the UI number.
-    sorted_vals = sorted(cat_averages.values(), reverse=True)
-    max_risk = sorted_vals[0] if sorted_vals else 0.0
+    # Weighted max risk calculation
+    weighted_vals = [cat_averages.get(c, 0.0) * CATEGORY_WEIGHTS.get(c, 0.3) for c in CATEGORIES]
+    max_risk = max(weighted_vals) if weighted_vals else 0.0
     
     # Since our truth values hit a maximum of 1.0 directly from data seeding
     # we can map this naturally into the 0-100 score format.

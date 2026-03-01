@@ -15,8 +15,7 @@ import asyncio
 import aiosqlite
 from db.database import init_db, DB_PATH
 
-CATEGORIES = ["crime", "public_safety", "transport", "infrastructure",
-               "policy", "protest", "weather", "other"]
+CATEGORIES = ["crime", "public_safety", "transport", "infrastructure", "protest", "other"]
 
 # Saint Louis bounding box
 LAT_MIN, LAT_MAX = 38.50, 38.80

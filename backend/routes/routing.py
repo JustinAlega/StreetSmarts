@@ -11,7 +11,7 @@ import aiohttp
 from fastapi import APIRouter
 from pydantic import BaseModel
 from typing import Optional
-from db.db_writer import DBWriter, CATEGORIES
+from db.db_writer import DBWriter, CATEGORIES, CATEGORY_WEIGHTS
 from dotenv import load_dotenv
 
 env_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), '.env')
@@ -37,8 +37,8 @@ async def get_risk_at(lat, lng):
     if truth is None:
         return 0.0
     
-    # Max across categories
-    risk = max(truth.get(c, 0.0) for c in CATEGORIES)
+    # Max across weighted categories
+    risk = max(truth.get(c, 0.0) * CATEGORY_WEIGHTS.get(c, 0.3) for c in CATEGORIES)
     
     # Distance decay
     dist_deg = math.sqrt((lat - truth["lat"])**2 + (lng - truth["lng"])**2)

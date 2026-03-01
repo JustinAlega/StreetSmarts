@@ -48,6 +48,7 @@ Return a JSON object with these fields:
 - "evidence": list of strings - any supporting evidence or corroborating details
 
 Be critical but fair. Local news from KMOX, KSDK, STL Today, FOX2, KMOV are credible St. Louis sources.
+Categorize findings into: ["crime", "public_safety", "transport", "infrastructure", "protest", "other"].
 
 Return ONLY valid JSON, no markdown fences, no explanation."""
 

@@ -8,8 +8,16 @@ import aiosqlite
 import math
 from .database import DB_PATH
 
-CATEGORIES = ["crime", "public_safety", "transport", "infrastructure",
-               "policy", "protest", "weather", "other"]
+CATEGORIES = ["crime", "public_safety", "transport", "infrastructure", "protest", "other"]
+
+CATEGORY_WEIGHTS = {
+    "crime": 1.0,           # Tier 1: Highest impact
+    "public_safety": 0.7,   # Tier 2: High impact
+    "transport": 0.3,       # Tier 3: Moderate/Informational
+    "infrastructure": 0.3,
+    "protest": 0.3,
+    "other": 0.3
+}
 
 
 class DBWriter:
